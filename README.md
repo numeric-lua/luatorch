@@ -172,9 +172,11 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.20.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.21.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **407 tests**. The 0.20
+> first-order fused backward, fused reductions, and **417 tests**. The 0.21
+> additions are `torch.linalg.matrix_power` and `torch.trapezoid` with
+> autograd, tests, docs, and benchmark coverage. The 0.20
 > additions are `torch.linalg.lstsq` with driver/rcond support, autograd and
 > benchmark coverage, and the related docs guards. The 0.19
 > additions are `torch.linalg.slogdet`, autograd coverage for einsum, float16,

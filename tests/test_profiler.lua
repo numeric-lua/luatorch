@@ -1,7 +1,7 @@
 local torch = require("torch")
 
-test("version is 0.20.0", function()
-  assert_eq(torch.VERSION, "0.20.0")
+test("version is 0.21.0", function()
+  assert_eq(torch.VERSION, "0.21.0")
 end)
 
 test("profiler counts tensor method calls", function()
