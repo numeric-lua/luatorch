@@ -100,3 +100,46 @@ test("grad is nil before backward", function()
   local x = torch.tensor({ 1, 2 }, { requires_grad = true })
   assert_eq(x:grad(), nil)
 end)
+
+test("matrix_power gradients flow through positive powers", function()
+  local a = torch.tensor({ { 1, 2 }, { 3, 4 } },
+    { dtype = torch.float64, requires_grad = true })
+  local powered = torch.linalg.matrix_power(a, 3)
+  assert_true(powered:requires_grad())
+  powered:sum():backward()
+  -- d sum(A^3) / dA, matching PyTorch for this matrix.
+  assert_near(a:grad():totable(), {
+    { 51, 87 },
+    { 67, 111 },
+  }, 1e-10)
+end)
+
+test("matrix_power gradients flow through negative powers and zero", function()
+  local a = torch.tensor({ { 4, 7 }, { 2, 6 } },
+    { dtype = torch.float64, requires_grad = true })
+  a:matrix_power(-1):sum():backward()
+  assert_near(a:grad():totable(), {
+    { 0.04, -0.08 },
+    { -0.03, 0.06 },
+  }, 1e-10)
+
+  local b = torch.tensor({ { 1, 2 }, { 3, 4 } },
+    { dtype = torch.float64, requires_grad = true })
+  local identity = b:matrix_power(0)
+  assert_true(identity:requires_grad())
+  assert_tensor(identity, { { 1, 0 }, { 0, 1 } })
+  identity:sum():backward()
+  assert_near(b:grad():totable(), { { 0, 0 }, { 0, 0 } }, 1e-12)
+end)
+
+test("trapezoid gradients flow to values and sample positions", function()
+  local y = torch.tensor({ 1, 2, 3 },
+    { dtype = torch.float64, requires_grad = true })
+  local x = torch.tensor({ 0, 1, 3 },
+    { dtype = torch.float64, requires_grad = true })
+  local integral = torch.trapezoid(y, x)
+  assert_true(integral:requires_grad())
+  integral:backward()
+  assert_near(y:grad():totable(), { 0.5, 1.5, 1 }, 1e-12)
+  assert_near(x:grad():totable(), { -1.5, -1, 2.5 }, 1e-12)
+end)

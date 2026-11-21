@@ -197,3 +197,85 @@ test("module-level operator aliases", function()
   assert_tensor(torch.reshape(a, 3, 1), { { 1 }, { 2 }, { 3 } })
   assert_tensor(torch.transpose(torch.zeros(2, 3), 1, 2), { { 0, 0 }, { 0, 0 }, { 0, 0 } })
 end)
+
+test("trapezoid integrates with uniform spacing", function()
+  local y = torch.tensor({ 1, 2, 3 }, { dtype = torch.float64 })
+  assert_near(torch.trapezoid(y):item(), 4, 1e-12)
+  assert_near(torch.trapezoid(y, nil, { dx = 2 }):item(), 8, 1e-12)
+  assert_near(y:trapezoid(nil, { dx = 0.5 }):item(), 2, 1e-12)
+
+  -- The default dimension is the last one.
+  local matrix = torch.tensor({ { 1, 2, 3 }, { 4, 5, 6 } },
+    { dtype = torch.float64 })
+  assert_tensor(matrix:trapezoid(), { 4, 10 })
+  assert_tensor(torch.trapezoid(matrix, { dx = 2 }), { 8, 20 })
+  assert_tensor(matrix:trapezoid(nil, { dim = 1 }), { 2.5, 3.5, 4.5 })
+end)
+
+test("trapezoid supports non-uniform sample positions", function()
+  local y = torch.tensor({ 1, 2, 3 }, { dtype = torch.float64 })
+  local x = torch.tensor({ 0, 1, 3 }, { dtype = torch.float64 })
+  assert_near(torch.trapezoid(y, x):item(), 6.5, 1e-12)
+  -- Integral inputs are promoted to the sample dtype.
+  assert_near(torch.trapezoid(y,
+    torch.tensor({ 0, 1, 3 }, { dtype = torch.int64 })):item(), 6.5, 1e-12)
+
+  local matrix = torch.tensor({ { 1, 2, 3 }, { 4, 5, 6 } },
+    { dtype = torch.float64 })
+  -- A 1-D x is reused along the chosen dimension.
+  local x2 = torch.tensor({ 0, 1 }, { dtype = torch.float64 })
+  assert_tensor(matrix:trapezoid(x2, { dim = 1 }), { 2.5, 3.5, 4.5 })
+
+  -- A same-shape x allows per-slice spacing.
+  local positions = torch.tensor({ { 0, 1, 3 }, { 0, 2, 3 } },
+    { dtype = torch.float64 })
+  assert_tensor(matrix:trapezoid(positions, { dim = 2 }), { 6.5, 14.5 })
+end)
+
+test("trapezoid handles short dimensions", function()
+  assert_near(torch.trapezoid(
+    torch.tensor({ 3 }, { dtype = torch.float64 })):item(), 0, 1e-12)
+  local empty = torch.trapezoid(torch.tensor({}, { dtype = torch.float64 }))
+  assert_shape(empty, {})
+  assert_near(empty:item(), 0, 1e-12)
+
+  local rows = torch.zeros(2, 0, { dtype = torch.float64 }):trapezoid()
+  assert_shape(rows, { 2 })
+  assert_tensor(rows, { 0, 0 })
+end)
+
+test("trapezoid validates arguments", function()
+  local y = torch.tensor({ 1, 2, 3 }, { dtype = torch.float64 })
+  assert_error(function()
+    y:trapezoid(nil, { dim = 0 })
+  end, "non-zero integer")
+  assert_error(function()
+    y:trapezoid(nil, { dim = 2 })
+  end, "out of range")
+  assert_error(function()
+    y:trapezoid(torch.tensor({ 0, 1 }, { dtype = torch.float64 }), {})
+  end, "one value per sample")
+  assert_error(function()
+    torch.zeros(2, 3, { dtype = torch.float64 }):trapezoid(
+      torch.ones(2, 2, { dtype = torch.float64 }))
+  end, "same shape")
+  assert_error(function()
+    y:trapezoid(torch.tensor({ 0, 1, 2 }, { dtype = torch.float32 }))
+  end, "dtype must match")
+  assert_error(function()
+    y:trapezoid(torch.tensor({ 0, 1, 2 }, { dtype = torch.float64 }),
+      { dx = 1 })
+  end, "either x or dx")
+  assert_error(function()
+    torch.trapezoid(y, 2)
+  end, "x must be a Tensor")
+  assert_error(function()
+    torch.trapezoid(torch.tensor({ 1, 2, 3 }, { dtype = torch.int64 }))
+  end, "floating-point")
+  assert_error(function()
+    torch.trapezoid(torch.tensor({ true, false }))
+  end, "floating-point")
+  assert_error(function()
+    torch.trapezoid(torch.tensor(3.0))
+  end, "at least one dimension")
+end)

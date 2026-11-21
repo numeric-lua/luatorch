@@ -302,3 +302,65 @@ test("lstsq validates options and input shapes", function()
       torch.ones(3, { dtype = torch.float16 }))
   end, "float and double")
 end)
+
+test("matrix_power computes integer powers", function()
+  local a = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_tensor(a:matrix_power(0), { { 1, 0 }, { 0, 1 } })
+  assert_tensor(a:matrix_power(1), a:totable())
+  assert_tensor(a:matrix_power(2), { { 7, 10 }, { 15, 22 } })
+  assert_tensor(a:matrix_power(3), { { 37, 54 }, { 81, 118 } })
+
+  -- A^-1 = [[-2, 1], [1.5, -0.5]]
+  assert_tensor(a:matrix_power(-1), { { -2, 1 }, { 1.5, -0.5 } }, 1e-12)
+  assert_tensor(a:matrix_power(-2),
+    { { 5.5, -2.5 }, { -3.75, 1.75 } }, 1e-12)
+  assert_tensor(torch.linalg.matrix_power(a, 3),
+    a:matrix_power(3):totable())
+  assert_dtype(a:matrix_power(2), "float64")
+end)
+
+test("matrix_power supports batches and integer tensors", function()
+  local batch = torch.tensor({
+    { { 1, 1 }, { 0, 1 } },
+    { { 2, 0 }, { 0, 2 } },
+  }, { dtype = torch.float64 })
+  assert_shape(batch:matrix_power(2), { 2, 2, 2 })
+  assert_tensor(batch:matrix_power(2), {
+    { { 1, 2 }, { 0, 1 } },
+    { { 4, 0 }, { 0, 4 } },
+  })
+  assert_tensor(batch:matrix_power(0), {
+    { { 1, 0 }, { 0, 1 } },
+    { { 1, 0 }, { 0, 1 } },
+  })
+  assert_shape(batch:matrix_power(-1), { 2, 2, 2 })
+
+  local integers = torch.tensor({ { 1, 2 }, { 3, 4 } },
+    { dtype = torch.int64 })
+  assert_tensor(integers:matrix_power(2), { { 7, 10 }, { 15, 22 } })
+  assert_dtype(integers:matrix_power(0), "int64")
+  assert_tensor(torch.ones(1, 2, 2, { dtype = torch.int64 }):matrix_power(0),
+    { { { 1, 0 }, { 0, 1 } } })
+end)
+
+test("matrix_power validates its input", function()
+  local a = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_error(function()
+    a:matrix_power(1.5)
+  end, "integer exponent")
+  assert_error(function()
+    a:matrix_power(math.huge)
+  end, "integer exponent")
+  assert_error(function()
+    torch.ones(2, 3):matrix_power(2)
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2):matrix_power(2)
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):matrix_power(-1)
+  end, "floating-point")
+  assert_error(function()
+    torch.tensor({ { true, false }, { false, true } }):matrix_power(2)
+  end, "bool")
+end)
