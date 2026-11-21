@@ -3,6 +3,32 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.21.0] — 2026-11-21
+
+### Added
+
+- `torch.linalg.matrix_power` / `Tensor:matrix_power(n)`, a pure-Lua integer
+  matrix power with binary exponentiation over `matmul`; supports square and
+  batched square matrices, integer dtypes for non-negative exponents, negative
+  exponents through `inverse` for floating-point inputs, and zero/one
+  exponents that return a fresh identity or clone;
+- `torch.trapezoid` / `Tensor:trapezoid(x?, opts?)`, a pure-Lua trapezoidal
+  integration along one dimension with uniform `dx` or non-uniform 1-D/same-
+  shape sample positions, a 1-based `dim` option defaulting to the last
+  dimension, and autograd through both values and floating-point samples;
+- ten tests covering matrix powers (positive, negative, zero, batched, integer,
+  aliases, gradients, validation) and trapezoid (uniform, non-uniform, short
+  dimensions, gradients, validation);
+- benchmark entries for `matrix_power` forward and forward+backward and for
+  `trapezoid` forward and forward+backward.
+
+### Changed
+
+- docs describe both functions, including dtype restrictions, option shape,
+  and autograd behavior; the API documentation test guards
+  `torch.linalg.matrix_power` and `torch.trapezoid`;
+- README shows `matrix_power` and `trapezoid` examples.
+
 ## [0.20.0] — 2026-11-21
 
 ### Added

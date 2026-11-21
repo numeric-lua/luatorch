@@ -325,10 +325,12 @@ a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular value
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:svd(full_matrices?)  -- returns U, S, Vh
 a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
+a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
+torch.linalg.matrix_power(a, n)
 ```
 
 `slogdet` computes the signed log-determinant without forming the determinant,
@@ -358,6 +360,15 @@ also empty for underdetermined or rank-deficient systems. `rcond` must be
 non-negative when supplied; it is honored by `gelsy`, `gelsd`, and `gelss`,
 and `rcond = 0` uses machine precision. The solution is differentiable. CPU
 LAPACK only accepts float32 and float64, so cast float16 inputs first.
+
+`matrix_power` raises a square matrix to an integer power with binary
+exponentiation and supports batches of square matrices. Non-negative
+exponents accept floating and integer dtypes; negative exponents call
+`inverse`, so they require a floating-point tensor. `n = 0` returns a fresh
+identity, and `n = 1` returns a clone rather than aliasing the input. The
+result is differentiable for floating-point inputs, including negative
+exponents. Float16 works for non-negative exponents through `matmul`; negative
+powers follow the usual CPU LAPACK float32/float64 restriction.
 
 ### Einstein summation
 
@@ -503,6 +514,7 @@ t:norm(p?, dim?, keepdim?)     -- p defaults to 2; math.huge supported
 t:logsumexp(dim?, keepdim?)
 t:cumsum(dim?)                 -- dim defaults to 1
 t:cumprod(dim?)
+t:trapezoid(x?, opts?)         -- integrate along a dimension
 t:all(dim?, keepdim?)
 t:any(dim?, keepdim?)
 ```
@@ -512,6 +524,26 @@ t:any(dim?, keepdim?)
 ```lua
 local values, indices = t:max(2)
 ```
+
+`trapezoid` applies the trapezoidal rule along one dimension and removes that
+dimension from the result. `x` supplies the sample positions either as a 1-D
+tensor with one value per sample or as a tensor shaped like `t`; when `x` is
+omitted, `opts.dx` sets a uniform spacing (default `1`). `opts.dim` is 1-based
+and defaults to the last dimension. Exactly one of `x` and `dx` may be given:
+
+```lua
+local y = torch.tensor({1, 2, 3}, {dtype = torch.float64})
+torch.trapezoid(y)                              -- 4.0
+torch.trapezoid(y, nil, {dx = 0.5})             -- 2.0
+torch.trapezoid(y, torch.tensor({0, 1, 3},
+  {dtype = torch.float64}))                     -- 6.5
+```
+
+The input must be floating point; integer and bool tensors are rejected
+instead of being promoted (cast them first, unlike PyTorch). Integral `x` is
+cast to the input dtype, but a floating `x` must already match it. The result
+is differentiable with respect to both the values and a floating-point `x`. A
+dimension with fewer than two samples integrates to zero.
 
 ## Autograd
 
@@ -553,6 +585,11 @@ composite backward. `torch.isnan`, `torch.isinf`, and `torch.isfinite` return
 detached bool tensors that cannot be differentiated; use them to build masks
 for `where`, `masked_select`, or boolean indexing, where gradients flow only
 through the selected values.
+
+`matrix_power` and `trapezoid` are composite operations, so their graphs are
+built from differentiable ATen calls: positive matrix powers differentiate
+through `matmul` (negative powers also through `inverse`), and `trapezoid`
+differentiates with respect to both the values and a floating-point `x`.
 
 ## Functional utilities and luafun
 
@@ -641,10 +678,12 @@ torch.get_num_threads() / torch.set_num_threads(n)
 torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / gather / scatter / multinomial
 torch.ger(a, b)                  -- outer product of two vectors
 torch.einsum(equation, ...)      -- validated Einstein summation
+torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
 torch.linalg.matrix_norm(a, ord) -- fro, 2, -2, 1, -1, inf, -inf
 torch.linalg.cond(a, p?)         -- 2, 1, inf, fro
 torch.linalg.matrix_rank(a, tol?)
+torch.linalg.matrix_power(a, n)  -- integer matrix power
 torch.linalg.vector_norm(a, ord?, dim?, keepdim?)
 torch.linalg.slogdet(a)          -- returns sign, logabsdet
 torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values

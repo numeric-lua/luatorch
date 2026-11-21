@@ -142,6 +142,20 @@ print(x:totable(), rank:item())   -- {1, 2}, 2
 See [docs/api.md](docs/api.md) for driver and `rcond` semantics; the solution
 is differentiable.
 
+`torch.linalg.matrix_power` raises a square matrix to an integer power, and
+`torch.trapezoid` integrates a tensor along one dimension with the trapezoidal
+rule. Both support autograd and batched `matrix_power`:
+
+```lua
+local a = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64,
+  requires_grad = true})
+local a2 = torch.linalg.matrix_power(a, -2)   -- A^-2
+print(a2:totable())                           -- {{5.5, -2.5}, {-3.75, 1.75}}
+
+local y = torch.tensor({1, 2, 3}, {dtype = torch.float64})
+print(torch.trapezoid(y, {dx = 0.5}):item())  -- 2.0
+```
+
 ## Profiling
 
 `torch.profiler` optionally records per-tensor-method call counts and CPU time,
