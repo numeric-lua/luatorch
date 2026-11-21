@@ -1174,6 +1174,53 @@ function Tensor:qr(mode)
   return wrap(q_pointer[0]), wrap(r_pointer[0])
 end
 
+-- Integer matrix powers for square and batched square matrices. Binary
+-- exponentiation keeps the autograd graph shallow; a negative exponent
+-- inverts first, and exponent zero returns a fresh identity.
+function Tensor:matrix_power(exponent)
+  if type(exponent) ~= "number" or exponent ~= exponent or
+      exponent % 1 ~= 0 or exponent == math.huge or exponent == -math.huge then
+    error("matrix_power expects an integer exponent", 3)
+  end
+  if self:dim() < 2 or self:size(-2) ~= self:size(-1) then
+    error("matrix_power expects square matrices", 3)
+  end
+  if self:dtype() == "bool" then
+    error("matrix_power does not support bool tensors", 3)
+  end
+  local n = math.floor(exponent)
+  if n < 0 and not self:is_floating_point() then
+    error("matrix_power with a negative exponent requires a " ..
+      "floating-point tensor", 3)
+  end
+  if n == 0 then
+    local identity = self:clone():zero_()
+    identity:add_(wrap(lib.lt_eye(self:size(-1), self:dtype_id())))
+    return identity
+  end
+  if n == 1 then
+    return self:clone()
+  end
+  local base
+  if n < 0 then
+    base = self:inverse()
+    n = -n
+  else
+    base = self
+  end
+  local result = nil
+  while n > 0 do
+    if n % 2 == 1 then
+      result = result == nil and base or result:matmul(base)
+    end
+    n = math.floor(n / 2)
+    if n > 0 then
+      base = base:matmul(base)
+    end
+  end
+  return result
+end
+
 function Tensor:mv(vector)
   return wrap(lib.lt_mv(self.h, vector.h))
 end
@@ -1374,6 +1421,100 @@ end
 
 function Tensor:logsumexp(dim, keepdim)
   return wrap(lib.lt_logsumexp(self.h, self:_cdim(dim), keepdim and 1 or 0))
+end
+
+local function sizes_equal(a, b)
+  if #a ~= #b then
+    return false
+  end
+  for i = 1, #a do
+    if a[i] ~= b[i] then
+      return false
+    end
+  end
+  return true
+end
+
+-- Trapezoidal rule along one dimension. `x` holds the sample positions: it
+-- may be a 1-D tensor with one value per sample or a tensor shaped like the
+-- input, in which case spacing may vary per slice. With no `x`, `dx` is the
+-- uniform spacing. The integrated dimension is removed from the result.
+function Tensor:trapezoid(x, opts)
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("trapezoid options must be a table", 3)
+  end
+  if x ~= nil and not is_tensor(x) then
+    error("trapezoid x must be a Tensor or nil", 3)
+  end
+  if self:dim() < 1 then
+    error("trapezoid expects a tensor with at least one dimension", 3)
+  end
+  if not self:is_floating_point() then
+    error("trapezoid expects a floating-point tensor; cast integer or bool " ..
+      "inputs first", 3)
+  end
+  local dim = opts.dim
+  if dim == nil then
+    dim = self:dim()
+  elseif type(dim) ~= "number" or dim % 1 ~= 0 or dim == 0 then
+    error("trapezoid dim must be a non-zero integer", 3)
+  end
+  if dim < 0 then
+    dim = self:dim() + dim + 1
+  end
+  if dim < 1 or dim > self:dim() then
+    error("trapezoid dim is out of range", 3)
+  end
+  local dx = opts.dx
+  if dx ~= nil and type(dx) ~= "number" then
+    error("trapezoid dx must be a number", 3)
+  end
+  if x ~= nil and dx ~= nil then
+    error("trapezoid accepts either x or dx, not both", 3)
+  end
+
+  local n = self:size(dim)
+  if x ~= nil then
+    if x:dtype() == "bool" then
+      error("trapezoid x does not support bool tensors", 3)
+    end
+    if not x:is_floating_point() then
+      x = x:to(self:dtype_id())
+    elseif x:dtype_id() ~= self:dtype_id() then
+      error("trapezoid x dtype must match the input dtype", 3)
+    end
+    if x:dim() == 1 then
+      if x:size(1) ~= n then
+        error("trapezoid x must have one value per sample along dim", 3)
+      end
+    elseif x:dim() ~= self:dim() or not sizes_equal(x:sizes(), self:sizes()) then
+      error("trapezoid x must be 1-D with size(dim) values or have the " ..
+        "same shape as the input", 3)
+    end
+  end
+
+  if n <= 1 then
+    -- No intervals: a zero with the integrated dimension removed.
+    return self:narrow(dim, 1, 0):sum(dim)
+  end
+
+  local values = self:narrow(dim, 1, n - 1)
+    :add(self:narrow(dim, 2, n - 1)):mul(0.5)
+  local delta
+  if x == nil then
+    delta = dx == nil and 1 or dx
+  elseif x:dim() == 1 then
+    delta = x:narrow(1, 2, n - 1):sub(x:narrow(1, 1, n - 1))
+    local shape = {}
+    for i = 1, self:dim() do shape[i] = 1 end
+    shape[dim] = n - 1
+    delta = delta:reshape(shape)
+  else
+    delta = x:narrow(dim, 2, n - 1):sub(x:narrow(dim, 1, n - 1))
+  end
+  return values:mul(delta):sum(dim)
 end
 
 -- ---------------------------------------------------------------------------

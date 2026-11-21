@@ -443,6 +443,23 @@ torch.log = function(t) return t:log() end
 torch.sqrt = function(t) return t:sqrt() end
 torch.abs = function(t) return t:abs() end
 
+-- Trapezoidal integration. `x` may be a tensor of sample positions; when it
+-- is omitted, `dx` (default 1) is the uniform spacing. `opts` accepts `dim`
+-- and `dx`, and the integrated dimension defaults to the last one.
+function torch.trapezoid(y, x, opts)
+  if not Tensor.is_tensor(y) then
+    error("torch.trapezoid expects a tensor as its first argument", 2)
+  end
+  if x ~= nil and not Tensor.is_tensor(x) then
+    if type(x) == "table" and opts == nil then
+      opts, x = x, nil
+    else
+      error("torch.trapezoid x must be a Tensor or nil", 2)
+    end
+  end
+  return y:trapezoid(x, opts)
+end
+
 function torch.equal(a, b)
   return a:equal(b)
 end
@@ -722,6 +739,7 @@ torch.linalg = {
   cholesky = function(a, upper) return a:cholesky(upper) end,
   svd = function(a, full_matrices) return a:svd(full_matrices) end,
   qr = function(a, mode) return a:qr(mode) end,
+  matrix_power = function(a, n) return a:matrix_power(n) end,
   vector_norm = function(a, ord, dim, keepdim)
     if not Tensor.is_tensor(a) then
       error("vector_norm expects a tensor", 3)
