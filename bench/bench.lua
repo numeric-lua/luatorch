@@ -159,6 +159,30 @@ bench("lstsq fwd+bwd 128x64 float32", 5, function()
   lstsq_b:zero_grad()
 end, "gelsd, includes zero_grad")
 
+local power_base = torch.randn(128, 128)
+bench("matrix_power 128x128 p=8", 10, function()
+  local powered = power_base:matrix_power(8)
+end)
+
+local power_grad = torch.randn(64, 64, { requires_grad = true })
+bench("matrix_power fwd+bwd 64x64 p=8", 10, function()
+  local powered = power_grad:matrix_power(8)
+  powered:sum():backward()
+  power_grad:zero_grad()
+end, "p=8, includes zero_grad")
+
+local trapezoid_values = torch.randn(4096)
+bench("trapezoid 4096 float32", 50, function()
+  local integral = torch.trapezoid(trapezoid_values)
+end)
+
+local trapezoid_grad = torch.randn(1024, { requires_grad = true })
+bench("trapezoid fwd+bwd 1024 float32", 50, function()
+  local integral = torch.trapezoid(trapezoid_grad, { dx = 0.5 })
+  integral:backward()
+  trapezoid_grad:zero_grad()
+end, "includes zero_grad")
+
 -- per-call overhead -----------------------------------------------------
 local tiny = torch.randn(16)
 bench("small tensor add (16 elements)", 20000, function()
