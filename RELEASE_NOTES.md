@@ -1,4 +1,38 @@
-# luatorch 0.24.0
+# luatorch 0.25.0
+
+- `torch.linalg.pinv` / `Tensor:pinv(opts?)` wraps `at::linalg_pinv` and
+  computes the Moore-Penrose pseudoinverse through the CPU SVD path; it
+  accepts square, rectangular, rank-deficient, batched, and empty matrices,
+  unlike `inverse`, which requires a square full-rank matrix;
+- the pseudoinverse keeps the input dtype (float32/float64) and is
+  differentiable with respect to the input; float16, integer, bool, complex,
+  and sub-2-D inputs are rejected by the Lua layer with clear messages;
+- `opts.atol` and `opts.rtol` are non-negative scalars that set the cutoff
+  `max(atol, sigma_1 * rtol)`. With no options ATen uses
+  `rtol = max(m, n) * eps`; a positive `atol` without `rtol` sets `rtol` to
+  zero, matching PyTorch. Tensor-valued tolerances and the `hermitian` flag
+  are not exposed;
+- four tests cover full-rank square/tall/wide pseudoinverses, all four
+  Moore-Penrose identities for a rank-one matrix, zero/empty/batched inputs,
+  relative and absolute cutoffs, central-difference gradients, and
+  shape/dtype/option errors;
+- docs, README, design notes, roadmap, and CHANGELOG describe the
+  pseudoinverse semantics, cutoff defaults, real-dtype limits, and the
+  repeated-singular-value autograd caveat; the docs test guards the new
+  alias;
+- benchmark entries for 128x128 and 256x128 forward and a 64x64
+  forward+backward pass (no timing gate). The official-bench medians on this
+  host were 8.3-9.0 ms for the 128x128 float32 forward, 12.2-15.4 ms for
+  256x128, and 4.0-13.0 ms for the 64x64 forward+backward pass; the suite
+  uses `os.clock` with the default thread count and varied by more than 3x
+  between runs. In a focused one-thread best-of-N check against eager
+  PyTorch 2.15, pinv was 3.07 vs 2.23 ms for 128x128, 3.51 vs 3.32 ms for
+  256x128, and 0.84 vs 1.02 ms for the 64x64 forward+backward pass; the
+  forward gap tracks `svd` (2.15 vs 1.94 ms), so this workload is close to
+  eager PyTorch and the cross-version comparison is indicative only;
+- 436 tests.
+
+## luatorch 0.24.0
 
 - `torch.linalg.lu_factor` / `Tensor:lu_factor()` wraps
   `at::linalg_lu_factor_ex` with factorization error checking enabled and

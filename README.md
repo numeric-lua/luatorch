@@ -216,12 +216,16 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.24.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.25.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **432 tests**. The 0.24
-> additions are `torch.linalg.lu_factor` and `torch.linalg.lu_solve` with
-> reusable packed factors, 1-based pivots, validated real-valued solves,
-> batched and adjoint solves, autograd, tests, docs, and benchmark coverage.
+> first-order fused backward, fused reductions, and **436 tests**. The 0.25
+> additions are `torch.linalg.pinv` with SVD-based rank-deficient,
+> rectangular, batched, and empty-matrix pseudoinverses, `atol`/`rtol`
+> cutoffs, real float32/float64 validation, autograd, tests, docs, and
+> benchmark coverage. The 0.24 additions are `torch.linalg.lu_factor` and
+> `torch.linalg.lu_solve` with reusable packed factors, 1-based pivots,
+> validated real-valued solves, batched and adjoint solves, autograd, tests,
+> docs, and benchmark coverage.
 > The 0.23 additions are `torch.linalg.lu` with partial pivoting, rectangular
 > and batched inputs, autograd through `L` and `U`, tests, docs, and benchmark
 > coverage. The 0.22 additions are `torch.linalg.solve_triangular` with a
