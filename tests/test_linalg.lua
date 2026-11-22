@@ -755,3 +755,383 @@ test("lu validates dimensions and dtypes", function()
   assert_dtype(l, "float32")
   assert_dtype(u, "float32")
 end)
+
+-- Rebuild P, L, U from the packed LU and 1-based pivots returned by
+-- lu_factor. The row swaps are applied in reverse order, matching
+-- torch.lu_unpack's convention for A = P L U.
+local function unpack_lu(lu, pivots)
+  local m, n = lu:size(1), lu:size(2)
+  local k = math.min(m, n)
+  local dtype = lu:dtype()
+  local l = torch.zeros(m, k, { dtype = dtype })
+  local u = torch.zeros(k, n, { dtype = dtype })
+  for i = 1, k do
+    l:set(i, i, 1)
+  end
+  for i = 1, m do
+    for j = 1, n do
+      local value = lu:get(i, j)
+      if i > j and j <= k then
+        l:set(i, j, value)
+      elseif i <= j and i <= k then
+        u:set(i, j, value)
+      end
+    end
+  end
+  local p = torch.zeros(m, m, { dtype = dtype })
+  for i = 1, m do
+    p:set(i, i, 1)
+  end
+  for i = k, 1, -1 do
+    local j = pivots:get(i)
+    if j ~= i then
+      for column = 1, m do
+        local left = p:get(i, column)
+        p:set(i, column, p:get(j, column))
+        p:set(j, column, left)
+      end
+    end
+  end
+  return p, l, u
+end
+
+test("lu_factor returns a compact pivoted factorization", function()
+  local a = float_matrix({ { 4, 3 }, { 2, 1 } })
+  local lu, pivots = a:lu_factor()
+  assert_dtype(lu, "float64")
+  assert_dtype(pivots, "int32")
+  assert_tensor(lu, { { 4, 3 }, { 0.5, -0.5 } }, 1e-12)
+  assert_eq(pivots:totable(), { 1, 2 })
+
+  local p, l, u = unpack_lu(lu, pivots)
+  assert_tensor(p, { { 1, 0 }, { 0, 1 } })
+  assert_tensor(l, { { 1, 0 }, { 0.5, 1 } }, 1e-12)
+  assert_tensor(u, { { 4, 3 }, { 0, -0.5 } }, 1e-12)
+  assert_tensor(p:matmul(l):matmul(u), a:totable(), 1e-12)
+
+  -- A zero leading pivot forces a row interchange; pivots are 1-based.
+  local swapped = float_matrix({ { 0, 1 }, { 1, 0 } })
+  local swapped_lu, swapped_pivots = swapped:lu_factor()
+  assert_tensor(swapped_lu, { { 1, 0 }, { 0, 1 } })
+  assert_eq(swapped_pivots:totable(), { 2, 2 })
+  local sp, sl, su = unpack_lu(swapped_lu, swapped_pivots)
+  assert_tensor(sp, { { 0, 1 }, { 1, 0 } })
+  assert_tensor(sp:matmul(sl):matmul(su), swapped:totable(), 1e-12)
+
+  -- The packed layout stores U on and above the diagonal and L below it.
+  local _, l_factor, u_factor = a:lu()
+  for i = 1, 2 do
+    for j = 1, 2 do
+      local expected = i > j and l_factor:get(i, j) or u_factor:get(i, j)
+      assert_near(lu:get(i, j), expected, 1e-12,
+        string.format("packed LU[%d][%d]", i, j))
+    end
+  end
+
+  local float32_lu, float32_pivots =
+    torch.tensor({ { 4, 3 }, { 2, 1 } }):lu_factor()
+  assert_dtype(float32_lu, "float32")
+  assert_dtype(float32_pivots, "int32")
+end)
+
+test("lu_factor handles rectangular, batched, and empty matrices", function()
+  local tall = float_matrix({ { 1, 2 }, { 3, 4 }, { 5, 6 } })
+  local tall_lu, tall_pivots = tall:lu_factor()
+  assert_shape(tall_lu, { 3, 2 })
+  assert_shape(tall_pivots, { 2 })
+  assert_tensor(tall_lu, {
+    { 5, 6 },
+    { 0.2, 0.7999999999999998 },
+    { 0.6000000000000001, 0.49999999999999944 },
+  }, 1e-12)
+  assert_eq(tall_pivots:totable(), { 3, 3 })
+  local tp, tl, tu = unpack_lu(tall_lu, tall_pivots)
+  assert_tensor(tp:matmul(tl):matmul(tu), tall:totable(), 1e-12)
+
+  local wide = float_matrix({ { 1, 2, 3 }, { 4, 5, 6 } })
+  local wide_lu, wide_pivots = wide:lu_factor()
+  assert_shape(wide_lu, { 2, 3 })
+  assert_shape(wide_pivots, { 2 })
+  assert_tensor(wide_lu, { { 4, 5, 6 }, { 0.25, 0.75, 1.5 } }, 1e-12)
+  assert_eq(wide_pivots:totable(), { 2, 2 })
+  local wp, wl, wu = unpack_lu(wide_lu, wide_pivots)
+  assert_tensor(wp:matmul(wl):matmul(wu), wide:totable(), 1e-12)
+
+  local batch = torch.tensor({
+    { { 4, 1, 2 }, { 3, 5, 1 }, { 1, 2, 6 } },
+    { { 0, 2, 1 }, { 1, 0, 3 }, { 4, 1, 0 } },
+  }, { dtype = torch.float64 })
+  local batch_lu, batch_pivots = batch:lu_factor()
+  assert_shape(batch_lu, { 2, 3, 3 })
+  assert_shape(batch_pivots, { 2, 3 })
+  assert_eq(batch_pivots:totable(), {
+    { 1, 2, 3 },
+    { 3, 3, 3 },
+  })
+  for i = 1, 2 do
+    local bp, bl, bu = unpack_lu(batch_lu:select(1, i),
+      batch_pivots:select(1, i))
+    assert_tensor(bp:matmul(bl):matmul(bu),
+      batch:select(1, i):totable(), 1e-12)
+  end
+
+  local empty_lu, empty_pivots =
+    torch.zeros(0, 0, { dtype = torch.float64 }):lu_factor()
+  assert_shape(empty_lu, { 0, 0 })
+  assert_shape(empty_pivots, { 0 })
+  local batch_empty_lu, batch_empty_pivots =
+    torch.zeros(2, 0, 0, { dtype = torch.float64 }):lu_factor()
+  assert_shape(batch_empty_lu, { 2, 0, 0 })
+  assert_shape(batch_empty_pivots, { 2, 0 })
+end)
+
+test("lu_solve solves systems from a compact factorization", function()
+  local a = float_matrix({ { 4, 3 }, { 2, 1 } })
+  local lu, pivots = a:lu_factor()
+  local single = float_matrix({ { 1 }, { 2 } })
+  assert_tensor(lu:lu_solve(pivots, single), { { 2.5 }, { -3 } }, 1e-12)
+  assert_tensor(torch.linalg.lu_solve(lu, pivots, single),
+    { { 2.5 }, { -3 } }, 1e-12)
+
+  local multiple = float_matrix({ { 1, 2, 3 }, { 4, 5, 6 } })
+  assert_tensor(lu:lu_solve(pivots, multiple), {
+    { 5.5, 6.5, 7.5 },
+    { -7, -8, -9 },
+  }, 1e-12)
+  assert_tensor(lu:lu_solve(pivots, multiple),
+    a:solve(multiple):totable(), 1e-12)
+
+  -- X A = B, with three right-hand-side rows but the same 2x2 factor.
+  local right = float_matrix({ { 1, 2 }, { 3, 4 }, { 5, 6 } })
+  assert_tensor(lu:lu_solve(pivots, right, { left = false }), {
+    { 1.5, -2.5 },
+    { 2.5, -3.5 },
+    { 3.5, -4.5 },
+  }, 1e-12)
+
+  -- adjoint solves A^T X = B for real tensors.
+  assert_tensor(lu:lu_solve(pivots, single, { adjoint = true }),
+    { { 1.5 }, { -2.5 } }, 1e-12)
+  assert_tensor(lu:lu_solve(pivots, single, { adjoint = true }),
+    a:t():solve(single):totable(), 1e-12)
+
+  local batch = torch.tensor({
+    { { 4, 1, 2 }, { 3, 5, 1 }, { 1, 2, 6 } },
+    { { 0, 2, 1 }, { 1, 0, 3 }, { 4, 1, 0 } },
+  }, { dtype = torch.float64 })
+  local batch_lu, batch_pivots = batch:lu_factor()
+  local rhs = torch.tensor({
+    { { 1, 2 }, { 3, 4 }, { 5, 6 } },
+    { { -1, 0 }, { 2, 1 }, { 0, 3 } },
+  }, { dtype = torch.float64 })
+  assert_tensor(batch_lu:lu_solve(batch_pivots, rhs),
+    batch:solve(rhs):totable(), 1e-12)
+
+  -- A right-hand side without batch dimensions broadcasts over the factor.
+  local shared = float_matrix({
+    { 1, 0, 0 },
+    { 0, 1, 0 },
+    { 0, 0, 1 },
+  })
+  assert_tensor(batch_lu:lu_solve(batch_pivots, shared),
+    batch:solve(shared):totable(), 1e-12)
+
+  local right_batch = torch.tensor({
+    { { 1, 2, 3 }, { 4, 5, 6 } },
+    { { 0, 1, 2 }, { 3, 4, 5 } },
+  }, { dtype = torch.float64 })
+  local expected_right = right_batch:matmul(batch:inverse())
+  assert_tensor(batch_lu:lu_solve(batch_pivots, right_batch,
+    { left = false }), expected_right:totable(), 1e-12)
+end)
+
+test("lu_factor and lu_solve gradients match the implicit derivative", function()
+  local values = { { 4, 1 }, { 2, 3 } }
+  local a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local b = torch.tensor({ { 1, 2 }, { 3, 4 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local lu, pivots = a:lu_factor()
+  assert_true(lu:requires_grad(), "LU carries gradients")
+  assert_true(not pivots:requires_grad(), "pivots are integer indices")
+
+  local reference_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local reference_b = torch.tensor({ { 1, 2 }, { 3, 4 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local weight = float_matrix({ { 1, 2 }, { 3, 5 } })
+  local solution = lu:lu_solve(pivots, b)
+  local loss = (solution * weight):sum()
+  loss:backward()
+  local reference = reference_a:solve(reference_b)
+  local reference_loss = (reference * weight):sum()
+  reference_loss:backward()
+  assert_near(a:grad():totable(), reference_a:grad():totable(), 1e-10)
+  assert_near(b:grad():totable(), reference_b:grad():totable(), 1e-10)
+
+  -- The adjoint solve differentiates like solving with A^T.
+  local adjoint_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local adjoint_b = torch.tensor({ { 1, 2 }, { 3, 4 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local transposed_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local transposed_b = torch.tensor({ { 1, 2 }, { 3, 4 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local adjoint_lu, adjoint_pivots = adjoint_a:lu_factor()
+  local adjoint_solution = adjoint_lu:lu_solve(adjoint_pivots, adjoint_b,
+    { adjoint = true })
+  local adjoint_loss = (adjoint_solution * weight):sum()
+  adjoint_loss:backward()
+  local transposed_solution = transposed_a:t():solve(transposed_b)
+  local transposed_loss = (transposed_solution * weight):sum()
+  transposed_loss:backward()
+  assert_near(adjoint_a:grad():totable(), transposed_a:grad():totable(),
+    1e-10)
+  assert_near(adjoint_b:grad():totable(), transposed_b:grad():totable(),
+    1e-10)
+
+  -- Central differences check the factor gradient directly. The pivots do
+  -- not move for these perturbations, so the factorization is smooth here.
+  local factor_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local factor_lu = factor_a:lu_factor()
+  local factor_loss = (factor_lu * weight):sum()
+  factor_loss:backward()
+
+  local eps = 1e-6
+  local function packed_loss(perturbed)
+    local tensor = torch.tensor(perturbed, { dtype = torch.float64 })
+    local packed = tensor:lu_factor()
+    return (packed * weight):sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      local plus = { { 4, 1 }, { 2, 3 } }
+      local minus = { { 4, 1 }, { 2, 3 } }
+      plus[i][j] = plus[i][j] + eps
+      minus[i][j] = minus[i][j] - eps
+      local numeric = (packed_loss(plus) - packed_loss(minus)) / (2 * eps)
+      assert_near(factor_a:grad():get(i, j), numeric, 1e-5,
+        string.format("d packed LU loss / d A[%d][%d]", i, j))
+    end
+  end
+end)
+
+test("lu_factor and lu_solve validate shapes, dtypes, and options", function()
+  local a = float_matrix({ { 4, 3 }, { 2, 1 } })
+  local lu, pivots = a:lu_factor()
+
+  assert_error(function()
+    torch.ones(3):lu_factor()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.tensor(1.0):lu_factor()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):lu_factor()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):lu_factor()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.tensor({ { true, false }, { false, true } }):lu_factor()
+  end, "float32 and float64")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):lu_factor()
+  end, "is zero")
+
+  assert_error(function()
+    lu:lu_solve(2, float_matrix({ { 1 }, { 2 } }))
+  end, "int32 pivots tensor")
+  assert_error(function()
+    lu:lu_solve(pivots, { 1, 2 })
+  end, "tensor right-hand side")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 } }), "left")
+  end, "options must be a table")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 } }), { transpose = true })
+  end, "unknown option")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 } }), { left = 1 })
+  end, "left must be a boolean")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 } }), { adjoint = "yes" })
+  end, "adjoint must be a boolean")
+
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):lu_solve(pivots,
+      float_matrix({ { 1 }, { 2 } }))
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(3):lu_solve(pivots, float_matrix({ { 1 }, { 2 } }))
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):lu_solve(pivots,
+      float_matrix({ { 1 }, { 2 } }))
+  end, "float32 and float64")
+  assert_error(function()
+    lu:lu_solve(pivots:float(), float_matrix({ { 1 }, { 2 } }))
+  end, "int32 dtype")
+  assert_error(function()
+    lu:lu_solve(torch.zeros(2, { dtype = torch.int64 }),
+      float_matrix({ { 1 }, { 2 } }))
+  end, "int32 dtype")
+  assert_error(function()
+    lu:lu_solve(pivots,
+      torch.ones(2, 1, { dtype = torch.float32 }))
+  end, "match the matrix dtype")
+  assert_error(function()
+    lu:lu_solve(torch.zeros(2, 2, { dtype = torch.int32 }),
+      float_matrix({ { 1 }, { 2 } }))
+  end, "one dimension less")
+  assert_error(function()
+    lu:lu_solve(torch.zeros(1, { dtype = torch.int32 }),
+      float_matrix({ { 1 }, { 2 } }))
+  end, "wrong length")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ 1, 2 }))
+  end, "at least 2 dimensions")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 }, { 3 } }))
+  end, "wrong number of rows")
+  assert_error(function()
+    lu:lu_solve(pivots, float_matrix({ { 1, 2, 3 } }), { left = false })
+  end, "wrong number of columns")
+
+  local batch_lu, batch_pivots = torch.tensor({
+    { { 3, 1 }, { 1, 2 } },
+    { { 4, 2 }, { 1, 3 } },
+  }, { dtype = torch.float64 }):lu_factor()
+  assert_shape(batch_lu, { 2, 2, 2 })
+  assert_shape(batch_pivots, { 2, 2 })
+  assert_error(function()
+    batch_lu:lu_solve(torch.tensor({ { 1, 2 }, { 1, 2 }, { 1, 2 } },
+      { dtype = torch.int32 }), float_matrix({ { 1 }, { 2 } }))
+  end, "batch dimensions")
+  assert_error(function()
+    lu:lu_solve(batch_pivots, float_matrix({ { 1 }, { 2 } }))
+  end, "one dimension less")
+  assert_error(function()
+    batch_lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 } }))
+  end, "one dimension less")
+end)
