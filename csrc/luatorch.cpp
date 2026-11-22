@@ -2192,6 +2192,31 @@ int lt_linalg_lu(lt_tensor* a, lt_tensor** P, lt_tensor** L, lt_tensor** U) {
   LT_CATCH_INT
 }
 
+int lt_linalg_lu_factor(lt_tensor* a, lt_tensor** LU, lt_tensor** pivots) {
+  try {
+    clear_error();
+    if (LU == nullptr || pivots == nullptr) {
+      throw std::runtime_error("lu_factor: null output pointer");
+    }
+    auto result = at::linalg_lu_factor_ex(a->t, /*pivot=*/true,
+                                          /*check_errors=*/true);
+    *LU = wrap(std::get<0>(result));
+    *pivots = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
+lt_tensor* lt_linalg_lu_solve(lt_tensor* LU, lt_tensor* pivots,
+                              lt_tensor* b, int left, int adjoint) {
+  try {
+    clear_error();
+    return wrap(at::linalg_lu_solve(
+        LU->t, pivots->t, b->t, left != 0, adjoint != 0));
+  }
+  LT_CATCH_NULL
+}
+
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v) {
   try {
     clear_error();

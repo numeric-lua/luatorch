@@ -743,6 +743,10 @@ torch.linalg = {
   svd = function(a, full_matrices) return a:svd(full_matrices) end,
   qr = function(a, mode) return a:qr(mode) end,
   lu = function(a) return a:lu() end,
+  lu_factor = function(a) return a:lu_factor() end,
+  lu_solve = function(lu, pivots, b, opts)
+    return lu:lu_solve(pivots, b, opts)
+  end,
   matrix_power = function(a, n) return a:matrix_power(n) end,
   vector_norm = function(a, ord, dim, keepdim)
     if not Tensor.is_tensor(a) then

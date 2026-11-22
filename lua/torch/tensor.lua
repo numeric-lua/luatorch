@@ -1268,6 +1268,97 @@ function Tensor:lu()
   return wrap(p_pointer[0]), wrap(l_pointer[0]), wrap(u_pointer[0])
 end
 
+-- Compact LU factorization with partial pivoting. Returns the packed LU
+-- matrix and ATen's 1-based pivots, so the result can be reused by lu_solve.
+-- A singular matrix raises instead of returning a factorization that would
+-- divide by zero later. Only the float32/float64 CPU LAPACK path is exposed.
+function Tensor:lu_factor()
+  if self:dim() < 2 then
+    error("lu_factor expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("lu_factor supports float32 and float64 tensors", 3)
+  end
+  local lu_pointer = ffi.new("lt_tensor*[1]")
+  local pivots_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_lu_factor(self.h, lu_pointer, pivots_pointer))
+  return wrap(lu_pointer[0]), wrap(pivots_pointer[0])
+end
+
+local lu_solve_options = {
+  left = true,
+  adjoint = true,
+}
+
+-- Solve A X = B (or X A = B when left is false) from the packed LU and
+-- 1-based pivots returned by lu_factor. `adjoint` solves A^T X = B for
+-- real tensors. Only float32/float64 inputs are accepted, B must be at
+-- least 2-D (use a column matrix for a single right-hand side), and the
+-- pivots must have int32 dtype and exactly the factorization's batch shape.
+function Tensor:lu_solve(pivots, other, opts)
+  if not is_tensor(pivots) then
+    error("lu_solve expects an int32 pivots tensor", 3)
+  end
+  if not is_tensor(other) then
+    error("lu_solve expects a tensor right-hand side", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("lu_solve options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not lu_solve_options[name] then
+      error("lu_solve got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  for _, name in ipairs({ "left", "adjoint" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("lu_solve " .. name .. " must be a boolean", 3)
+    end
+  end
+  if self:dim() < 2 or self:size(-2) ~= self:size(-1) then
+    error("lu_solve expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("lu_solve supports float32 and float64 tensors", 3)
+  end
+  if pivots:dtype() ~= "int32" then
+    error("lu_solve expects pivots with int32 dtype", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("lu_solve expects the right-hand side to match the matrix dtype", 3)
+  end
+  local n = self:size(-1)
+  if pivots:dim() ~= self:dim() - 1 then
+    error("lu_solve expects pivots with one dimension less than the matrix", 3)
+  end
+  for dim = 1, self:dim() - 2 do
+    if pivots:size(dim) ~= self:size(dim) then
+      error("lu_solve expects pivots to match the matrix batch dimensions", 3)
+    end
+  end
+  if pivots:size(-1) ~= n then
+    error("lu_solve pivots have the wrong length", 3)
+  end
+  if other:dim() < 2 then
+    error("lu_solve expects a right-hand side with at least 2 dimensions", 3)
+  end
+  local left = opts.left ~= false
+  local adjoint = opts.adjoint == true
+  if left then
+    if other:size(-2) ~= n then
+      error("lu_solve right-hand side has the wrong number of rows", 3)
+    end
+  elseif other:size(-1) ~= n then
+    error("lu_solve right-hand side has the wrong number of columns", 3)
+  end
+  return wrap(lib.lt_linalg_lu_solve(self.h, pivots.h, other.h,
+    left and 1 or 0, adjoint and 1 or 0))
+end
+
 -- Integer matrix powers for square and batched square matrices. Binary
 -- exponentiation keeps the autograd graph shallow; a negative exponent
 -- inverts first, and exponent zero returns a fresh identity.
