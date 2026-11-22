@@ -38,7 +38,7 @@ end)
 test("documented public functions exist", function()
   local api = read("docs/api.md")
   for _, name in ipairs({ "einsum", "isnan", "isinf", "isfinite", "from_blob",
-      "trapezoid" }) do
+      "trapezoid", "lu_unpack", "diagonal", "vander", "cross" }) do
     assert_true(api:find("torch." .. name, 1, true) ~= nil,
       "docs/api.md does not mention torch." .. name)
     assert_eq(type(torch[name]), "function", "torch." .. name .. " is missing")
@@ -61,7 +61,8 @@ test("documented linalg aliases exist", function()
   for _, name in ipairs({ "inv", "det", "slogdet", "solve",
       "solve_triangular", "lstsq", "cholesky", "svd", "qr", "lu",
       "lu_factor", "lu_solve", "pinv", "matrix_exp", "matrix_power",
-      "matrix_norm", "cond", "matrix_rank", "vector_norm" }) do
+      "matrix_norm", "cond", "matrix_rank", "vector_norm", "diagonal",
+      "vander", "cross", "multi_dot" }) do
     assert_true(api:find("torch.linalg." .. name, 1, true) ~= nil,
       "docs/api.md does not mention torch.linalg." .. name)
     assert_eq(type(torch.linalg[name]), "function",

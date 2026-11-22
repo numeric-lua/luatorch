@@ -3,6 +3,38 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.27.0] — 2026-11-22
+
+### Added
+
+- `torch.lu_unpack` / `Tensor:lu_unpack(pivots, opts?)` rebuilds `P`, `L`,
+  and `U` with `A = P L U` from the packed `(LU, pivots)` returned by
+  `lu_factor`; supports square, rectangular, batched, and empty factors,
+  validates int32 1-based pivots, exposes `unpack_data`/`unpack_pivots`
+  options, and differentiates through `L`/`U` while keeping `P` detached;
+- `torch.diagonal` / `torch.linalg.diagonal` / `Tensor:diagonal(offset?,
+  dim1?, dim2?)` extracts a diagonal from any dimension pair, with
+  `torch.diagonal`/`Tensor:diagonal` defaulting to dimensions 1 and 2 and
+  `torch.linalg.diagonal` defaulting to the last two dimensions; offsets,
+  batches, arbitrary dimension pairs, empty shapes, and autograd are covered;
+- `torch.vander` / `torch.linalg.vander` / `Tensor:vander(N?, increasing?)`
+  builds Vandermonde matrices; `torch.vander` is 1-D and decreasing by
+  default, while `torch.linalg.vander` accepts any rank and is increasing by
+  default, mirroring PyTorch;
+- `torch.cross` / `torch.linalg.cross` / `Tensor:cross(other, dim?)`
+  computes real 3-vector cross products along any dimension with broadcast
+  batch dimensions and autograd through both inputs;
+- `torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with
+  a dynamic-programming parenthesization, including 1-D first/last vector
+  endpoints, with autograd through the chain.
+
+### Changed
+
+- docs describe the new real-valued linalg helpers, defaults, validation, and
+  autograd behavior; the API documentation tests guard all new aliases; the
+  roadmap records them; the README status, feature table, and examples cover
+  the additions.
+
 ## [0.26.0] — 2026-11-22
 
 ### Added

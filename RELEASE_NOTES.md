@@ -1,3 +1,33 @@
+# luatorch 0.27.0
+
+- five real-valued linear-algebra helpers are now available, implemented in
+  Lua over the existing tensor/autograd surface with no native shim changes:
+  `torch.lu_unpack` / `Tensor:lu_unpack`, `torch.diagonal` /
+  `torch.linalg.diagonal` / `Tensor:diagonal`, `torch.vander` /
+  `torch.linalg.vander` / `Tensor:vander`, `torch.cross` /
+  `torch.linalg.cross` / `Tensor:cross`, and `torch.linalg.multi_dot`;
+- `lu_unpack` rebuilds `P`, `L`, and `U` from `lu_factor`'s packed factor,
+  supports square/rectangular/batched/empty matrices, validates int32 1-based
+  pivots, exposes `unpack_data`/`unpack_pivots`, and differentiates through
+  `L`/`U` while keeping `P` detached;
+- `diagonal` supports offsets, arbitrary dimension pairs, batches, and empty
+  shapes; `torch.diagonal`/`Tensor:diagonal` default to dimensions 1 and 2,
+  while `torch.linalg.diagonal` defaults to the last two dimensions;
+- `vander` mirrors both PyTorch forms: `torch.vander` is 1-D and decreasing by
+  default, while `torch.linalg.vander` accepts any rank and is increasing by
+  default; powers are ordinary differentiable tensor operations;
+- `cross` computes real 3-vector products along any dimension, requires matching
+  rank/dtype and length 3, broadcasts other dimensions, and carries gradients
+  to both inputs; integer and floating dtypes are accepted, bool is rejected;
+- `multi_dot` uses a dynamic-programming parenthesization for two or more
+  matrices, supports 1-D first/last vector endpoints, requires float16/float32/
+  float64 operands, and differentiates through the chain;
+- sixteen new tests cover reconstruction, offsets, batches, broadcast shapes,
+  vector endpoints, central-difference gradients, option/shape/dtype errors,
+  and empty inputs; the suite is now **457 tests**;
+- docs, README examples/status/table, API alias guards, CHANGELOG, and ROADMAP
+  describe or guard all five helpers. No timing gate was added.
+
 # luatorch 0.26.0
 
 - `torch.linalg.matrix_exp` / `Tensor:matrix_exp()` wraps

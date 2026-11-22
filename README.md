@@ -210,6 +210,28 @@ local y = torch.tensor({1, 2, 3}, {dtype = torch.float64})
 print(torch.trapezoid(y, {dx = 0.5}):item())  -- 2.0
 ```
 
+Smaller matrix helpers round out the same real-valued API. `lu_unpack`
+rebuilds `P`, `L`, and `U` from a packed factorization, `diagonal` extracts any
+offset from any dimension pair, `vander` builds Vandermonde matrices,
+`cross` computes real 3-vector products, and `multi_dot` multiplies a matrix
+chain in an optimal order. They compose ordinary differentiable tensor
+operations, so autograd works throughout:
+
+```lua
+local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
+local lu, pivots = a:lu_factor()
+local p, l, u = torch.lu_unpack(lu, pivots)     -- A = P L U
+
+local m = torch.tensor({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
+  {dtype = torch.float64})
+print(m:diagonal(1):totable())                  -- {2, 6}
+print(torch.linalg.vander(torch.tensor({1, 2, 3},
+  {dtype = torch.float64})):totable())          -- increasing powers
+print(torch.linalg.cross(torch.tensor({{1, 0, 0}}),
+  torch.tensor({{0, 1, 0}})):totable())         -- {{0, 0, 1}}
+print(torch.linalg.multi_dot({a, a}):totable()) -- optimal 2-matrix product
+```
+
 ## Profiling
 
 `torch.profiler` optionally records per-tensor-method call counts and CPU time,
@@ -226,10 +248,14 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.26.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.27.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **441 tests**. The 0.26
-> additions are `torch.linalg.matrix_exp` with scaling-and-squaring,
+> first-order fused backward, fused reductions, and **457 tests**. The 0.27
+> additions are `torch.lu_unpack`, `torch.diagonal`/`torch.linalg.diagonal`,
+> `torch.vander`/`torch.linalg.vander`, `torch.cross`/`torch.linalg.cross`,
+> and `torch.linalg.multi_dot`, with real-valued validation, autograd, tests,
+> and docs. The 0.26 additions are `torch.linalg.matrix_exp` with
+> scaling-and-squaring,
 > square/batched/empty matrices, real float32/float64 validation, autograd,
 > tests, docs, and benchmark coverage. The 0.25 additions are
 > `torch.linalg.pinv` with SVD-based rank-deficient, rectangular, batched,
@@ -368,7 +394,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Dtypes | float32/64/16, int8/16/32/64, uint8, bool; Torch7 typed constructors |
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `det`, `solve`, `solve_triangular`, `lu`, `lu_factor`, `lu_solve`, `pinv`, `matrix_exp`, `lstsq`, `cholesky`, `svd`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `det`, `solve`, `solve_triangular`, `lu`, `lu_factor`, `lu_solve`, `lu_unpack`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `multi_dot`, `lstsq`, `cholesky`, `svd`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

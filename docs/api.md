@@ -1,4 +1,4 @@
-# luatorch API reference (0.26.0)
+# luatorch API reference (0.27.0)
 
 All examples assume:
 
@@ -329,9 +329,13 @@ a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
 a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
+a:lu_unpack(pivots, opts?)    -- unpack packed LU into P, L, U
 a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
 a:matrix_exp()         -- matrix exponential of square/batched matrices
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
+a:diagonal(offset?, dim1?, dim2?)  -- diagonal over two dimensions
+a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
+a:cross(other, dim?)               -- 3-vector cross product along one dimension
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
@@ -339,6 +343,14 @@ torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
+torch.lu_unpack(lu, pivots, opts?)
+torch.diagonal(a, offset?, dim1?, dim2?)
+torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
+torch.cross(a, b, dim?)                   -- default dim is the last dimension
+torch.linalg.diagonal(a, offset?, dim1?, dim2?)  -- last two dims by default
+torch.linalg.vander(x, N?)                -- any rank, increasing by default
+torch.linalg.cross(a, b, dim?)            -- last dimension by default
+torch.linalg.multi_dot({a, b, c, ...})    -- optimal chain product
 torch.linalg.pinv(a, opts?)
 torch.linalg.matrix_exp(a)
 ```
@@ -406,6 +418,22 @@ local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
 local lu, pivots = a:lu_factor()
 local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
 print(lu:lu_solve(pivots, b):totable())  -- {{2.5}, {-3}}
+```
+
+`lu_unpack` turns the compact `(LU, pivots)` pair back into `P`, `L`, and
+`U` with `A = P L U`. It accepts the same square, rectangular, batched, and
+empty factors as `lu_factor`; `P` has shape `(*, m, m)`, `L` has shape
+`(*, m, k)`, and `U` has shape `(*, k, n)` for an input of shape `(*, m, n)`.
+The integer pivots are validated as 1-based row indices, and `P` stays
+detached. `L` and `U` are built with differentiable tensor arithmetic, so
+gradients flow through the packed factor. `opts.unpack_data = false` returns
+empty `L`/`U`, and `opts.unpack_pivots = false` returns an empty `P`:
+
+```lua
+local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
+local lu, pivots = a:lu_factor()
+local p, l, u = torch.lu_unpack(lu, pivots)
+print(p:matmul(l):matmul(u):totable())   -- {{4, 3}, {2, 1}}
 ```
 
 `pinv` computes the Moore-Penrose pseudoinverse through ATen's SVD-based
@@ -476,6 +504,48 @@ identity, and `n = 1` returns a clone rather than aliasing the input. The
 result is differentiable for floating-point inputs, including negative
 exponents. Float16 works for non-negative exponents through `matmul`; negative
 powers follow the usual CPU LAPACK float32/float64 restriction.
+
+`diagonal` extracts a diagonal from any two dimensions. The selected diagonal
+is appended as the last output dimension, while all other dimensions keep
+their order; `offset` is positive above the main diagonal and negative below
+it. `torch.diagonal` and `Tensor:diagonal` default to dimensions 1 and 2,
+whereas `torch.linalg.diagonal` defaults to the last two dimensions. Integer
+and floating dtypes are accepted, but bool is rejected.
+The result is differentiable with respect to the selected entries:
+
+```lua
+local a = torch.tensor({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
+  {dtype = torch.float64})
+print(a:diagonal(1):totable())      -- {2, 6}
+print(a:diagonal(-1):totable())     -- {4, 8}
+```
+
+`vander` builds a Vandermonde matrix. `torch.linalg.vander(x, N?)` accepts any
+rank, uses `N = x:size(-1)` by default, and appends the powers
+`x^0 .. x^(N-1)` (increasing order). `torch.vander(x, N?, increasing?)`
+requires a 1-D tensor and defaults to the historical decreasing order. Both
+forms preserve autograd through the powers. `N` must be a non-negative
+integer; `N = 0` returns an empty last dimension.
+
+`cross` computes the cross product of two real 3-vectors along `dim`, which
+defaults to the last dimension. The inputs must have the same rank, the same
+dtype, and length 3 along `dim`; their other dimensions broadcast. Integer and
+floating dtypes are supported, bool is rejected, and autograd flows to both
+inputs. `torch.cross` and `torch.linalg.cross` are aliases.
+
+`torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with a
+dynamic-programming parenthesization that minimizes scalar multiplications.
+The first and last operands may be 1-D vectors (treated as a row and column
+respectively); all middle operands must be 2-D, and batched inputs are not
+supported. All operands must share a float16/float32/float64 dtype. The result
+is the mathematically identical chain product, and autograd flows through every
+`matmul`:
+
+```lua
+local a = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
+local b = torch.tensor({{5, 6}, {7, 8}}, {dtype = torch.float64})
+print(torch.linalg.multi_dot({a, b}):totable())  -- {{19, 22}, {43, 50}}
+```
 
 ### Einstein summation
 
@@ -796,9 +866,14 @@ torch.linalg.slogdet(a)          -- returns sign, logabsdet
 torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values
 torch.linalg.pinv(a, opts?)      -- Moore-Penrose pseudoinverse
 torch.linalg.matrix_exp(a)       -- matrix exponential
+torch.lu_unpack(lu, pivots, opts?)  -- P, L, U from a packed factorization
+torch.diagonal(a, offset?, dim1?, dim2?) / torch.linalg.diagonal(a, ...)
+torch.vander(x, N?, increasing?) / torch.linalg.vander(x, N?)
+torch.cross(a, b, dim?) / torch.linalg.cross(a, b, dim?)
+torch.linalg.multi_dot({a, b, ...})
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.26.0")
+torch.VERSION             -- luatorch version string ("0.27.0")
 torch.version             -- libtorch version string
 ```
