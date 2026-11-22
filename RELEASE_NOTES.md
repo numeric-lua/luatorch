@@ -1,4 +1,31 @@
-# luatorch 0.25.0
+# luatorch 0.26.0
+
+- `torch.linalg.matrix_exp` / `Tensor:matrix_exp()` wraps
+  `at::linalg_matrix_exp` and computes the matrix exponential with scaling and
+  squaring for square, batched, and empty matrices; the result keeps the input
+  shape and dtype;
+- only real float32/float64 inputs are accepted. Sub-2-D, non-square, float16,
+  integer, and bool inputs are rejected by the Lua layer with clear messages;
+  ATen dispatches a CPU half kernel, but it is not numerically reliable (small
+  inputs returned NaN or large negative values in a local probe), so half is
+  deliberately not exposed;
+- five tests cover nilpotent, diagonal, scalar, and rotation generators,
+  `exp(A) exp(-A) = I`, `det(exp(A)) = exp(tr A)`, non-contiguous inputs,
+  batches and empty matrices, central-difference gradients, the exact
+  gradient at zero, and shape/dtype errors; 441 tests total;
+- docs, README, design notes, roadmap, CHANGELOG, and the docs test describe
+  or guard the new API;
+- benchmark entries for 128x128 and 8x32x32 forward passes and a 64x64
+  forward+backward pass (no timing gate). The official-bench medians on this
+  host were 4.3 ms, 0.45 ms, and 7.9 ms; that suite uses `os.clock` and the
+  default thread count, so multi-threaded entries report CPU time rather than
+  wall-clock. In a focused one-thread best-of-N check against eager PyTorch
+  2.15, matrix_exp was 1.86 vs 1.60 ms for 128x128, 0.46 vs 0.43 ms for
+  8x32x32, and 2.44 vs 2.17 ms for the 64x64 forward+backward pass; the
+  forward and gradient paths are close to eager, and the cross-version
+  comparison is indicative only.
+
+## luatorch 0.25.0
 
 - `torch.linalg.pinv` / `Tensor:pinv(opts?)` wraps `at::linalg_pinv` and
   computes the Moore-Penrose pseudoinverse through the CPU SVD path; it
