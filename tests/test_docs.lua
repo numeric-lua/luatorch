@@ -59,8 +59,8 @@ end)
 test("documented linalg aliases exist", function()
   local api = read("docs/api.md")
   for _, name in ipairs({ "inv", "det", "slogdet", "solve",
-      "solve_triangular", "lstsq", "cholesky", "svd", "qr", "matrix_power",
-      "matrix_norm", "cond", "matrix_rank", "vector_norm" }) do
+      "solve_triangular", "lstsq", "cholesky", "svd", "qr", "lu",
+      "matrix_power", "matrix_norm", "cond", "matrix_rank", "vector_norm" }) do
     assert_true(api:find("torch.linalg." .. name, 1, true) ~= nil,
       "docs/api.md does not mention torch.linalg." .. name)
     assert_eq(type(torch.linalg[name]), "function",

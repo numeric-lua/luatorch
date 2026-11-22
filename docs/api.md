@@ -326,13 +326,14 @@ a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular value
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:svd(full_matrices?)  -- returns U, S, Vh
 a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
+a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
-torch.linalg.matrix_power(a, n)
+torch.linalg.lu(a)       torch.linalg.matrix_power(a, n)
 ```
 
 `slogdet` computes the signed log-determinant without forming the determinant,
@@ -357,6 +358,21 @@ the unused triangle are zero.
 local a = torch.tensor({{2, 0}, {1, 3}}, {dtype = torch.float64})
 local b = torch.tensor({2, 4}, {dtype = torch.float64})
 print(a:solve_triangular(b, {upper = false}):totable())  -- {1, 1}
+```
+
+`lu` computes a pivoted LU factorization `A = P L U` with partial pivoting.
+For an input of shape `(*, m, n)`, it returns `P` of shape `(*, m, m)`, `L`
+of shape `(*, m, k)`, and `U` of shape `(*, k, n)`, where `k = min(m, n)`.
+`P` is a permutation matrix and is detached from autograd; `L` is unit lower
+triangular, `U` is upper triangular, and both are differentiable. Square,
+rectangular, and batched matrices are supported. Only float32 and float64 are
+accepted, because CPU LAPACK does not implement other dtypes, and the
+unpivoted variant is not exposed:
+
+```lua
+local a = torch.tensor({{0, 1}, {1, 0}}, {dtype = torch.float64})
+local p, l, u = a:lu()
+print(p:matmul(l):matmul(u):totable())  -- {{0, 1}, {1, 0}}
 ```
 
 `lstsq` minimizes `||A x - b||` and returns four values: `solution`,

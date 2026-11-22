@@ -153,6 +153,16 @@ local b = torch.tensor({2, 4}, {dtype = torch.float64})
 print(a:solve_triangular(b, {upper = false}):totable())  -- {1, 1}
 ```
 
+`torch.linalg.lu` returns the pivoted factorization `A = P L U` for square,
+rectangular, and batched matrices. `P` is a detached permutation matrix, while
+`L` and `U` carry gradients:
+
+```lua
+local a = torch.tensor({{0, 1}, {1, 0}}, {dtype = torch.float64})
+local p, l, u = a:lu()
+print(p:matmul(l):matmul(u):totable())  -- {{0, 1}, {1, 0}}
+```
+
 `torch.linalg.matrix_power` raises a square matrix to an integer power, and
 `torch.trapezoid` integrates a tensor along one dimension with the trapezoidal
 rule. Both support autograd and batched `matrix_power`:
@@ -313,7 +323,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Dtypes | float32/64/16, int8/16/32/64, uint8, bool; Torch7 typed constructors |
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `det`, `solve`, `solve_triangular`, `lstsq`, `cholesky`, `svd`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `det`, `solve`, `solve_triangular`, `lu`, `lstsq`, `cholesky`, `svd`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

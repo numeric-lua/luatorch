@@ -3,6 +3,26 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.23.0] — 2026-11-22
+
+### Added
+
+- `torch.linalg.lu` / `Tensor:lu()` backed by `at::linalg_lu`, returning
+  `P`, `L`, and `U` with `A = P L U` under partial pivoting; supports square,
+  rectangular, and batched matrices, requires float32/float64 (matching CPU
+  LAPACK), keeps the permutation `P` detached, and differentiates through
+  `L` and `U`;
+- four tests covering known square/rectangular factors, row interchanges,
+  batches and empty matrices, central-difference gradients through `L` and
+  `U`, and dimension/dtype errors;
+- benchmark entries for `lu` forward and forward+backward.
+
+### Changed
+
+- docs and README describe the factorization, output shapes, dtype
+  restrictions, and autograd behavior; the API documentation test guards the
+  new `torch.linalg.lu` alias; the roadmap records `lu` as implemented.
+
 ## [0.22.0] — 2026-11-22
 
 ### Added
