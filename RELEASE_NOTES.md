@@ -6,7 +6,8 @@
   shape `(*, m, n)` the factors have shapes `(*, m, m)`, `(*, m, k)`, and
   `(*, k, n)` with `k = min(m, n)`;
 - float32 and float64 only, matching the CPU LAPACK implementation; other
-  dtypes and the unpivoted variant are rejected with clear Lua errors;
+  dtypes are rejected with clear Lua errors and the unpivoted variant is not
+  exposed;
 - `P` is a permutation matrix and stays detached from autograd; `L` and `U`
   are differentiable;
 - four tests cover known square/rectangular factors, row interchanges,
