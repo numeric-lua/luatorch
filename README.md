@@ -205,18 +205,20 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.23.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.24.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **427 tests**. The 0.23
-> additions are `torch.linalg.lu` with partial pivoting, rectangular and
-> batched inputs, autograd through `L` and `U`, tests, docs, and benchmark
+> first-order fused backward, fused reductions, and **432 tests**. The 0.24
+> additions are `torch.linalg.lu_factor` and `torch.linalg.lu_solve` with
+> reusable packed factors, 1-based pivots, validated real-valued solves,
+> batched and adjoint solves, autograd, tests, docs, and benchmark coverage.
+> The 0.23 additions are `torch.linalg.lu` with partial pivoting, rectangular
+> and batched inputs, autograd through `L` and `U`, tests, docs, and benchmark
 > coverage. The 0.22 additions are `torch.linalg.solve_triangular` with a
 > required `upper` flag, batched and right-side solves, autograd, tests, docs,
 > and benchmark coverage. The 0.21 additions are `torch.linalg.matrix_power`
 > and `torch.trapezoid` with autograd, tests, docs, and benchmark coverage.
-> The 0.20
-> additions are `torch.linalg.lstsq` with driver/rcond support, autograd and
-> benchmark coverage, and the related docs guards. The 0.19
+> The 0.20 additions are `torch.linalg.lstsq` with driver/rcond support,
+> autograd and benchmark coverage, and the related docs guards. The 0.19
 > additions are `torch.linalg.slogdet`, autograd coverage for einsum, float16,
 > and the detached NaN/Inf predicates, docs guards, and benchmark entries. The
 > 0.18 additions are `torch.isfinite`, zero-copy `float16` `from_blob` buffers,
@@ -293,7 +295,7 @@ fast fusion backend; without it, fusion falls back to LuaJIT loops.
 ```bash
 scripts/fetch_libtorch.sh     # downloads ~170 MB into third_party/libtorch
 scripts/build.sh              # builds build/libluatorch.so
-scripts/test.sh               # 427 tests
+scripts/test.sh               # 432 tests
 scripts/bench.sh              # micro-benchmarks
 scripts/repl.sh               # interactive REPL
 ```

@@ -1,4 +1,40 @@
-# luatorch 0.23.0
+# luatorch 0.24.0
+
+- `torch.linalg.lu_factor` / `Tensor:lu_factor()` wraps
+  `at::linalg_lu_factor_ex` with factorization error checking enabled and
+  returns the packed `LU` factor plus int32, 1-based pivots; it supports
+  square, rectangular, batched, and empty matrices;
+- `torch.linalg.lu_solve` / `Tensor:lu_solve(pivots, b, opts?)` wraps
+  `at::linalg_lu_solve` and reuses a factor to solve `A X = B`, `X A = B`
+  with `left = false`, or `A^T X = B` with `adjoint = true`;
+- only float32/float64 factors and right-hand sides are accepted; singular
+  matrices raise at factorization time instead of producing a factor that
+  divides by zero later; the Lua layer validates pivot dtype/batch shape,
+  square factor shape, right-hand-side layout, and matching dtypes, while
+  ATen broadcasts only the right-hand side;
+- gradients flow through the packed `LU` and the right-hand side; the
+  integer pivots stay detached;
+- five tests cover packed square/rectangular factors, batched and empty
+  inputs, multiple/right-side/adjoint/broadcast solves, gradients through
+  the factor and solve, and validation errors;
+- docs, README, design notes, roadmap, and CHANGELOG describe the packed
+  representation, 1-based pivots, solve layouts, dtype limits, and autograd
+  behavior; the docs test guards both new aliases;
+- benchmark entries for factor, reusable solve, and factor+solve
+  forward+backward (no timing gate). The official-bench medians on this host
+  were 0.15-0.19 ms for a 128x128 float32 factor, 0.08 ms for a 128x128
+  factor with 32 right-hand sides, and 3.5 ms for a 64x64 factor+solve
+  forward+backward pass; the forward+backward entry is dominated by
+  thread/GC variance, and the existing `lu` forward+backward entry moved
+  from 0.28 ms to 2.64 ms between two runs of the same suite. In a focused
+  one-thread check against eager PyTorch 2.15, the factor was 0.25 vs
+  0.13 ms, the reusable solve was 0.19 vs 0.12 ms, and the 64x64
+  factor+solve forward+backward pass was 1.25 vs 0.73 ms, so this workload
+  is currently slower than eager PyTorch at one thread; the cross-version
+  comparison is indicative only;
+- 432 tests.
+
+## luatorch 0.23.0
 
 - `torch.linalg.lu` / `Tensor:lu()` wraps `at::linalg_lu` and returns `P`,
   `L`, and `U` with `A = P L U` under partial pivoting;
