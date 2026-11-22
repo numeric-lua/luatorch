@@ -3,6 +3,34 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.25.0] — 2026-11-22
+
+### Added
+
+- `torch.linalg.pinv` / `Tensor:pinv(opts?)` backed by `at::linalg_pinv`,
+  computing the Moore-Penrose pseudoinverse through the CPU SVD path for
+  square, rectangular, rank-deficient, batched, and empty matrices; unlike
+  `inverse`, it does not require full rank;
+- `opts.atol` / `opts.rtol` set the singular-value cutoff
+  `max(atol, sigma_1 * rtol)`, with ATen's `max(m, n) * eps` default and
+  PyTorch's rule that a positive `atol` alone sets `rtol` to zero;
+- Lua validation rejects non-real dtypes (float16, integer, bool), sub-2-D
+  inputs, non-table options, unknown keys, and negative or NaN tolerances
+  with clear messages; the result keeps the input dtype and is differentiable
+  with respect to the input;
+- four tests covering full-rank square/tall/wide inverses, all four
+  Moore-Penrose identities on a rank-one matrix, zero and empty matrices,
+  batched rectangular inputs, cutoff behavior, central-difference gradients,
+  and validation errors;
+- benchmark entries for square/tall `pinv` and a forward+backward pass.
+
+### Changed
+
+- docs describe pseudoinverse semantics, cutoff defaults, real-dtype limits,
+  batch/empty shapes, and the repeated-singular-value autograd caveat; the
+  API documentation test guards the new `torch.linalg.pinv` alias; the
+  roadmap records the pseudoinverse.
+
 ## [0.24.0] — 2026-11-22
 
 ### Added

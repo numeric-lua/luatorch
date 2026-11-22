@@ -329,6 +329,7 @@ a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
 a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
+a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
@@ -337,6 +338,7 @@ torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
+torch.linalg.pinv(a, opts?)
 ```
 
 `slogdet` computes the signed log-determinant without forming the determinant,
@@ -403,6 +405,28 @@ local lu, pivots = a:lu_factor()
 local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
 print(lu:lu_solve(pivots, b):totable())  -- {{2.5}, {-3}}
 ```
+
+`pinv` computes the Moore-Penrose pseudoinverse through ATen's SVD-based
+`linalg_pinv`. Unlike `inverse`, it accepts rectangular, rank-deficient,
+batched, and empty matrices: for an input of shape `(*, m, n)` the result has
+shape `(*, n, m)` and satisfies the four Moore-Penrose identities. Singular
+values at or below `max(atol, sigma_1 * rtol)` are treated as zero, where
+`sigma_1` is the largest singular value. When `rtol` is omitted it defaults to
+`max(m, n) * eps`; supplying a positive `atol` without `rtol` sets `rtol` to
+zero, matching PyTorch:
+
+```lua
+local a = torch.tensor({{1, 2}, {3, 4}, {5, 7}}, {dtype = torch.float64})
+print(a:pinv():sizes())                  -- {2, 3}
+print(a:pinv({rtol = 1e-6}):sizes())     -- {2, 3}
+```
+
+Only real float32/float64 inputs are accepted because the CPU LAPACK SVD path
+has no half-precision kernel and luatorch has no complex dtype; float16,
+integer, and bool inputs are rejected with Lua errors. `atol` and `rtol` must
+be non-negative numbers. The pseudoinverse is differentiable with respect to
+the input, but its derivative diverges at repeated singular values, so
+gradients near a rank change can be ill-conditioned.
 
 `lstsq` minimizes `||A x - b||` and returns four values: `solution`,
 `residuals`, `rank`, and `singular_values`. For a matrix `A` of shape
@@ -640,9 +664,9 @@ Gradients keep the tensor dtype: a `float16` graph produces `float16`
 gradients, and casts promote the gradient back to the source dtype. `float16`
 autograd covers elementwise math, reductions, matmul and einsum, `nn.Linear`,
 the losses, softmax/log-softmax, and `where`/masked updates. CPU LAPACK
-operations (`inverse`, `det`, `slogdet`, `svd`, `cholesky`, `qr`, `lstsq`)
-reject `float16` through ATen, and the custom optimizer kernels require
-float32 or float64 parameters; cast to float32 for those paths.
+operations (`inverse`, `det`, `slogdet`, `svd`, `pinv`, `cholesky`, `qr`,
+`lstsq`) reject `float16` through ATen, and the custom optimizer kernels
+require float32 or float64 parameters; cast to float32 for those paths.
 
 `torch.einsum` is differentiable for every equation form -- implicit outputs,
 diagonals and traces, ellipses/batches, and scalar operands -- matching ATen's
@@ -752,6 +776,7 @@ torch.linalg.matrix_power(a, n)  -- integer matrix power
 torch.linalg.vector_norm(a, ord?, dim?, keepdim?)
 torch.linalg.slogdet(a)          -- returns sign, logabsdet
 torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values
+torch.linalg.pinv(a, opts?)      -- Moore-Penrose pseudoinverse
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)

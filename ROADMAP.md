@@ -56,6 +56,7 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
 - [x] `matrix_norm`, `vector_norm`, `cond`, `matrix_rank`, `slogdet`
 - [x] `lu` with partial pivoting, batching, and autograd
 - [x] `lu_factor`/`lu_solve` compact reusable solves with validation
+- [x] `pinv` SVD-based pseudoinverse for rank-deficient and batched matrices
 - [ ] `eig`, remaining `linalg.*` bindings
 - [x] Random: `normal_`, `exponential_`, `bernoulli_`, `uniform_`, `multinomial`
 - [ ] More distributions: `poisson`, `geometric`, `cauchy`, tensor-weighted

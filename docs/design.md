@@ -143,6 +143,11 @@ ATen is 0-based; the Lua API is 1-based. Conversions live exclusively in
   layer validates dtype, square shape, pivot batch shape, and right-hand-side
   layout before dispatch, while ATen broadcasts only the right-hand side.
   Gradients flow through `LU` and `B`, never through the integer pivots.
+- `pinv` delegates to ATen's SVD-based `linalg_pinv`, which covers
+  rectangular, rank-deficient, batched, and empty matrices with a single
+  real-valued path. The Lua layer validates rank, float32/float64 dtype, and
+  non-negative `atol`/`rtol` before dispatch, and documents that gradients
+  are ill-conditioned at repeated singular values.
 - `multinomial` samples 1-based categories for the same reason as `argmax`;
   uniform/normal/exponential/bernoulli updates are in-place and run through
   ATen's RNG.
