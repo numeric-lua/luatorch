@@ -159,6 +159,34 @@ bench("lstsq fwd+bwd 128x64 float32", 5, function()
   lstsq_b:zero_grad()
 end, "gelsd, includes zero_grad")
 
+local function lower_triangular(size)
+  local values = torch.randn(size, size):totable()
+  for i = 1, size do
+    for j = i + 1, size do
+      values[i][j] = 0
+    end
+    values[i][i] = values[i][i] + size
+  end
+  return torch.tensor(values)
+end
+
+local triangular_a = lower_triangular(128)
+local triangular_b = torch.randn(128, 128)
+bench("solve_triangular 128x128 f32", 10, function()
+  local solution = triangular_a:solve_triangular(triangular_b, { upper = false })
+end, "lower")
+
+local triangular_grad_a = lower_triangular(64)
+triangular_grad_a:requires_grad_(true)
+local triangular_grad_b = torch.randn(64, 64, { requires_grad = true })
+bench("solve_triangular fwd+bwd 64x64", 10, function()
+  local solution = triangular_grad_a:solve_triangular(triangular_grad_b,
+    { upper = false })
+  solution:sum():backward()
+  triangular_grad_a:zero_grad()
+  triangular_grad_b:zero_grad()
+end, "lower, includes zero_grad")
+
 local power_base = torch.randn(128, 128)
 bench("matrix_power 128x128 p=8", 10, function()
   local powered = power_base:matrix_power(8)
