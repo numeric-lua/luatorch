@@ -2217,6 +2217,24 @@ lt_tensor* lt_linalg_lu_solve(lt_tensor* LU, lt_tensor* pivots,
   LT_CATCH_NULL
 }
 
+lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
+                          int has_atol, int has_rtol) {
+  try {
+    clear_error();
+    std::optional<double> atol_option;
+    if (has_atol != 0) {
+      atol_option = atol;
+    }
+    std::optional<double> rtol_option;
+    if (has_rtol != 0) {
+      rtol_option = rtol;
+    }
+    return wrap(at::linalg_pinv(a->t, atol_option, rtol_option,
+                                /*hermitian=*/false));
+  }
+  LT_CATCH_NULL
+}
+
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v) {
   try {
     clear_error();

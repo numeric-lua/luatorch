@@ -161,6 +161,8 @@ int lt_linalg_lu(lt_tensor* a, lt_tensor** P, lt_tensor** L, lt_tensor** U);
 int lt_linalg_lu_factor(lt_tensor* a, lt_tensor** LU, lt_tensor** pivots);
 lt_tensor* lt_linalg_lu_solve(lt_tensor* LU, lt_tensor* pivots,
                               lt_tensor* b, int left, int adjoint);
+lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
+                          int has_atol, int has_rtol);
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v);
 lt_tensor* lt_outer(lt_tensor* a, lt_tensor* b);
 lt_tensor* lt_addmm(lt_tensor* self, lt_tensor* a, lt_tensor* b,

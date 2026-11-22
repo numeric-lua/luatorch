@@ -1359,6 +1359,45 @@ function Tensor:lu_solve(pivots, other, opts)
     left and 1 or 0, adjoint and 1 or 0))
 end
 
+local pinv_options = {
+  atol = true,
+  rtol = true,
+}
+
+-- Moore-Penrose pseudoinverse through ATen's SVD-based `linalg_pinv`.
+-- Unlike `inverse`, it accepts rectangular, rank-deficient, and batched
+-- matrices; `atol`/`rtol` set the singular-value cutoff. Only the real
+-- float32/float64 CPU LAPACK path is exposed, since half precision has no
+-- SVD kernel here and luatorch has no complex dtype.
+function Tensor:pinv(opts)
+  if self:dim() < 2 then
+    error("pinv expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("pinv supports float32 and float64 tensors", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("pinv options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not pinv_options[name] then
+      error("pinv got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  local atol, rtol = opts.atol, opts.rtol
+  if atol ~= nil and (type(atol) ~= "number" or atol ~= atol or atol < 0) then
+    error("pinv atol must be a non-negative number", 3)
+  end
+  if rtol ~= nil and (type(rtol) ~= "number" or rtol ~= rtol or rtol < 0) then
+    error("pinv rtol must be a non-negative number", 3)
+  end
+  return wrap(lib.lt_linalg_pinv(self.h, atol or 0, rtol or 0,
+    atol ~= nil and 1 or 0, rtol ~= nil and 1 or 0))
+end
+
 -- Integer matrix powers for square and batched square matrices. Binary
 -- exponentiation keeps the autograd graph shallow; a negative exponent
 -- inverts first, and exponent zero returns a fresh identity.
