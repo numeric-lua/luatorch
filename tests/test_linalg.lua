@@ -1135,3 +1135,163 @@ test("lu_factor and lu_solve validate shapes, dtypes, and options", function()
     batch_lu:lu_solve(pivots, float_matrix({ { 1 }, { 2 } }))
   end, "one dimension less")
 end)
+
+test("pinv returns Moore-Penrose pseudoinverses", function()
+  local square = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_tensor(square:pinv(), { { -2, 1 }, { 1.5, -0.5 } }, 1e-12)
+  assert_tensor(torch.linalg.pinv(square), square:pinv():totable(), 1e-12)
+
+  -- A full-rank tall matrix has a left inverse: pinv(A) A = I.
+  local tall = float_matrix({
+    { 1, 0 },
+    { 0, 1 },
+    { 1, 1 },
+  })
+  local tall_pinv = tall:pinv()
+  assert_shape(tall_pinv, { 2, 3 })
+  assert_tensor(tall_pinv:matmul(tall), { { 1, 0 }, { 0, 1 } }, 1e-12)
+  assert_tensor(tall:matmul(tall_pinv):matmul(tall), tall:totable(), 1e-12)
+
+  -- A full-rank wide matrix has a right inverse: A pinv(A) = I.
+  local wide = tall:t()
+  local wide_pinv = wide:pinv()
+  assert_shape(wide_pinv, { 3, 2 })
+  assert_tensor(wide:matmul(wide_pinv), { { 1, 0 }, { 0, 1 } }, 1e-12)
+  assert_tensor(wide_pinv:matmul(wide):matmul(wide_pinv),
+    wide_pinv:totable(), 1e-12)
+
+  -- The output keeps the input dtype.
+  assert_dtype(torch.ones(2, 3):pinv(), "float32")
+  assert_dtype(square:pinv(), "float64")
+end)
+
+test("pinv handles rank-deficient, batched, and empty matrices", function()
+  -- A rank-one matrix has a rank-one pseudoinverse; check all four
+  -- Moore-Penrose identities instead of only A pinv(A) A = A.
+  local rank_one = float_matrix({ { 1, 2 }, { 2, 4 } })
+  local rank_pinv = rank_one:pinv()
+  assert_tensor(rank_pinv, { { 0.04, 0.08 }, { 0.08, 0.16 } }, 1e-12)
+  local rank_projection = rank_one:matmul(rank_pinv)
+  assert_tensor(rank_projection:matmul(rank_one), rank_one:totable(), 1e-12)
+  assert_tensor(rank_pinv:matmul(rank_projection), rank_pinv:totable(), 1e-12)
+  assert_tensor(rank_projection:t(), rank_projection:totable(), 1e-12)
+  local other_projection = rank_pinv:matmul(rank_one)
+  assert_tensor(other_projection:t(), other_projection:totable(), 1e-12)
+
+  -- The pseudoinverse of the zero matrix is the zero matrix.
+  local zeros = torch.zeros(3, 2, { dtype = torch.float64 })
+  assert_tensor(zeros:pinv(),
+    torch.zeros(2, 3, { dtype = torch.float64 }):totable(), 0)
+
+  -- A batched rectangular input maps to a batched pseudoinverse.
+  local batch = torch.tensor({
+    { { 1, 0 }, { 0, 1 }, { 1, 1 } },
+    { { 2, 0 }, { 0, 4 }, { 0, 1 } },
+  }, { dtype = torch.float64 })
+  local batch_pinv = batch:pinv()
+  assert_shape(batch_pinv, { 2, 2, 3 })
+  assert_tensor(batch_pinv:matmul(batch), {
+    { { 1, 0 }, { 0, 1 } },
+    { { 1, 0 }, { 0, 1 } },
+  }, 1e-12)
+  assert_tensor(batch:matmul(batch_pinv):matmul(batch), batch:totable(), 1e-12)
+  assert_tensor(batch_pinv:matmul(batch):matmul(batch_pinv),
+    batch_pinv:totable(), 1e-12)
+
+  -- Empty matrices stay empty, including empty batch dimensions.
+  assert_shape(torch.zeros(0, 0, { dtype = torch.float64 }):pinv(), { 0, 0 })
+  assert_shape(torch.zeros(2, 0, { dtype = torch.float64 }):pinv(), { 0, 2 })
+  assert_shape(torch.zeros(0, 3, { dtype = torch.float64 }):pinv(), { 3, 0 })
+  assert_shape(torch.zeros(4, 0, 3, { dtype = torch.float64 }):pinv(),
+    { 4, 3, 0 })
+
+  -- A relative cutoff discards tiny singular values instead of amplifying
+  -- them by 1e6; absolute and relative cutoffs both zero the whole matrix.
+  local scaled = float_matrix({ { 1, 0 }, { 0, 1e-6 } })
+  assert_tensor(scaled:pinv(), { { 1, 0 }, { 0, 1e6 } }, 1e-3)
+  assert_tensor(scaled:pinv({ rtol = 1e-3 }), { { 1, 0 }, { 0, 0 } }, 1e-12)
+  assert_tensor(scaled:pinv({ atol = 1e-3 }), { { 1, 0 }, { 0, 0 } }, 1e-12)
+  assert_tensor(torch.eye(3, { dtype = torch.float64 }):pinv({ rtol = 1 }),
+    { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } }, 0)
+end)
+
+test("pinv gradients match central differences", function()
+  local values = { { 1, 2 }, { 3, 4 }, { 5, 7 } }
+  local weight = float_matrix({ { 1, 2, 3 }, { 4, 5, 6 } })
+  local a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local inverse = a:pinv()
+  assert_true(inverse:requires_grad(), "pinv carries gradients")
+  local loss = (inverse * weight):sum()
+  loss:backward()
+  assert_shape(a:grad(), { 3, 2 })
+
+  local eps = 1e-6
+  local function pseudoinverse_loss(perturbed)
+    local tensor = torch.tensor(perturbed, { dtype = torch.float64 })
+    return (tensor:pinv() * weight):sum():item()
+  end
+  for i = 1, 3 do
+    for j = 1, 2 do
+      local plus = { { 1, 2 }, { 3, 4 }, { 5, 7 } }
+      local minus = { { 1, 2 }, { 3, 4 }, { 5, 7 } }
+      plus[i][j] = plus[i][j] + eps
+      minus[i][j] = minus[i][j] - eps
+      local numeric = (pseudoinverse_loss(plus) -
+        pseudoinverse_loss(minus)) / (2 * eps)
+      assert_near(a:grad():get(i, j), numeric, 1e-6,
+        string.format("d pinv loss / d A[%d][%d]", i, j))
+    end
+  end
+
+  -- A batched loss differentiates per matrix, with the weight broadcast
+  -- over the batch dimension.
+  local batch = torch.tensor({
+    { { 1, 0 }, { 0, 1 }, { 1, 1 } },
+    { { 2, 0 }, { 0, 4 }, { 0, 1 } },
+  }, { dtype = torch.float64, requires_grad = true })
+  local batch_inverse = batch:pinv()
+  assert_shape(batch_inverse, { 2, 2, 3 })
+  local batch_loss = (batch_inverse * weight):sum()
+  batch_loss:backward()
+  assert_shape(batch:grad(), { 2, 3, 2 })
+end)
+
+test("pinv validates shapes, dtypes, and options", function()
+  local matrix = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_error(function()
+    torch.ones(3):pinv()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.tensor(1.0):pinv()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):pinv()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):pinv()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.tensor({ { true, false }, { false, true } }):pinv()
+  end, "float32 and float64")
+  assert_error(function()
+    matrix:pinv("atol")
+  end, "options must be a table")
+  assert_error(function()
+    matrix:pinv({ hermitian = true })
+  end, "unknown option")
+  assert_error(function()
+    matrix:pinv({ atol = -1 })
+  end, "atol must be a non-negative")
+  assert_error(function()
+    matrix:pinv({ rtol = -1 })
+  end, "rtol must be a non-negative")
+  assert_error(function()
+    matrix:pinv({ atol = 0 / 0 })
+  end, "atol must be a non-negative")
+  assert_error(function()
+    matrix:pinv({ rtol = "small" })
+  end, "rtol must be a non-negative")
+end)
