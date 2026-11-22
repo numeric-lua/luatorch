@@ -118,6 +118,23 @@ bench("pinv fwd+bwd 64x64 float32", 10, function()
   pinv_grad:zero_grad()
 end, "includes zero_grad")
 
+local exp_square = torch.randn(128, 128)
+bench("matrix_exp 128x128 float32", 10, function()
+  local exponential = exp_square:matrix_exp()
+end)
+
+local exp_batch = torch.randn(8, 32, 32)
+bench("matrix_exp 8x32x32 float32", 10, function()
+  local exponential = exp_batch:matrix_exp()
+end, "batched")
+
+local exp_grad = torch.randn(64, 64, { requires_grad = true })
+bench("matrix_exp fwd+bwd 64x64 float32", 10, function()
+  local exponential = exp_grad:matrix_exp()
+  exponential:sum():backward()
+  exp_grad:zero_grad()
+end, "includes zero_grad")
+
 -- recent ops: einsum, float16, predicates, slogdet -----------------------
 local einsum_a = torch.randn(128, 128)
 local einsum_b = torch.randn(128, 128)
