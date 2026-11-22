@@ -327,13 +327,16 @@ a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:svd(full_matrices?)  -- returns U, S, Vh
 a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
 a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
+a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
+a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
-torch.linalg.lu(a)       torch.linalg.matrix_power(a, n)
+torch.linalg.lu(a)       torch.linalg.lu_factor(a)
+torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
 ```
 
 `slogdet` computes the signed log-determinant without forming the determinant,
@@ -373,6 +376,32 @@ unpivoted variant is not exposed:
 local a = torch.tensor({{0, 1}, {1, 0}}, {dtype = torch.float64})
 local p, l, u = a:lu()
 print(p:matmul(l):matmul(u):totable())  -- {{0, 1}, {1, 0}}
+```
+
+`lu_factor` returns the compact factorization `(LU, pivots)` used by
+`lu_solve`. `LU` has the same shape as `A`: `U` occupies the diagonal and
+upper triangle, and the strict lower triangle stores the multipliers of `L`.
+`pivots` is an int32 tensor of 1-based row interchanges with shape
+`(*, min(m, n))` for an input of shape `(*, m, n)`. Singular matrices raise
+instead of returning a factorization that would divide by zero later.
+Rectangular and batched inputs are supported, but `lu_solve` requires a
+square factor.
+
+`lu_solve` solves `A X = B` from the `(LU, pivots)` pair. `left = false`
+solves `X A = B`, and `adjoint = true` solves `A^T X = B` (the real-valued
+transpose). `B` must be at least 2-D: for a left solve it has shape
+`(*, n, k)` with `n` equal to the factor size, and for a right solve its
+last dimension must equal the factor size. A single right-hand side is a
+column matrix. The pivot batch shape must match the factor exactly, while
+`B`'s batch dimensions may broadcast. `LU` and `B` must share the
+float32/float64 dtype. The solution is differentiable with respect to `LU`
+and `B`; the integer pivots stay detached.
+
+```lua
+local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
+local lu, pivots = a:lu_factor()
+local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
+print(lu:lu_solve(pivots, b):totable())  -- {{2.5}, {-3}}
 ```
 
 `lstsq` minimizes `||A x - b||` and returns four values: `solution`,

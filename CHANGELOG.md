@@ -3,6 +3,36 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.24.0] — 2026-11-22
+
+### Added
+
+- `torch.linalg.lu_factor` / `Tensor:lu_factor()` backed by
+  `at::linalg_lu_factor_ex` with factorization error checking enabled,
+  returning the packed `LU` factor and int32, 1-based `pivots`; supports
+  square, rectangular, batched, and empty matrices and rejects non-real
+  dtypes with clear Lua errors;
+- `torch.linalg.lu_solve` / `Tensor:lu_solve(pivots, b, opts?)` backed by
+  `at::linalg_lu_solve`, reusing a compact factor to solve `A X = B` with
+  `left = false` for `X A = B` and `adjoint = true` for `A^T X = B`;
+  validates pivot dtype/batch shape, square factors, right-hand-side layout,
+  and float32/float64 dtype, supports batched factors with broadcast
+  right-hand sides, and differentiates through `LU` and `B` while keeping
+  the integer pivots detached;
+- five tests covering packed square/rectangular factors, batched and empty
+  inputs, solves from the factor (multiple right-hand sides, right-side and
+  adjoint solves, broadcast batches), gradients through the factor and
+  solve, and shape/dtype/option errors;
+- benchmark entries for `lu_factor`, `lu_solve`, and a forward+backward
+  factor/solve pass.
+
+### Changed
+
+- docs describe the packed representation, 1-based pivots, singular-matrix
+  error, solve layouts, dtype restrictions, and autograd behavior; the API
+  documentation test guards the new `torch.linalg.lu_factor` and
+  `torch.linalg.lu_solve` aliases; the roadmap records the reusable solves.
+
 ## [0.23.0] — 2026-11-22
 
 ### Added
