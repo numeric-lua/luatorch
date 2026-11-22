@@ -1,4 +1,31 @@
-# luatorch 0.22.0
+# luatorch 0.23.0
+
+- `torch.linalg.lu` / `Tensor:lu()` wraps `at::linalg_lu` and returns `P`,
+  `L`, and `U` with `A = P L U` under partial pivoting;
+- square, rectangular, and batched matrices are supported; for an input of
+  shape `(*, m, n)` the factors have shapes `(*, m, m)`, `(*, m, k)`, and
+  `(*, k, n)` with `k = min(m, n)`;
+- float32 and float64 only, matching the CPU LAPACK implementation; other
+  dtypes and the unpivoted variant are rejected with clear Lua errors;
+- `P` is a permutation matrix and stays detached from autograd; `L` and `U`
+  are differentiable;
+- four tests cover known square/rectangular factors, row interchanges,
+  rectangular/batched/empty inputs, central-difference gradients through `L`
+  and `U`, and dimension/dtype errors;
+- docs, README, design notes, and the roadmap describe the factorization, its
+  output shapes, and dtype/autograd behavior; the docs test guards the new
+  alias;
+- benchmark entries for forward and forward+backward (no timing gate); the
+  best official-bench medians were 0.196 ms for a 128x128 float32
+  factorization and 0.270 ms for a 64x64 forward+backward pass. Medians varied
+  by up to ~4x across runs while another checkout was compiling on the same
+  host. A separate wall-clock check measured 0.28-0.33 ms forward and
+  0.31-0.37 ms forward+backward against eager PyTorch 2.15 at 0.17-0.20 ms and
+  0.26-0.39 ms, so forward is currently slower and backward is roughly at
+  parity; the cross-version comparison is indicative only;
+- 427 tests.
+
+## luatorch 0.22.0
 
 - `torch.linalg.solve_triangular` / `Tensor:solve_triangular(b, opts)` wraps
   `at::linalg_solve_triangular` for lower and upper triangular systems,

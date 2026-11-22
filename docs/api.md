@@ -1,4 +1,4 @@
-# luatorch API reference (0.22.0)
+# luatorch API reference (0.23.0)
 
 All examples assume:
 
@@ -726,6 +726,6 @@ torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.22.0")
+torch.VERSION             -- luatorch version string ("0.23.0")
 torch.version             -- libtorch version string
 ```
