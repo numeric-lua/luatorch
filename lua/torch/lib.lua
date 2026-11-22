@@ -157,6 +157,7 @@ lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper);
 int lt_linalg_svd(lt_tensor* a, int full_matrices,
                   lt_tensor** U, lt_tensor** S, lt_tensor** Vh);
 int lt_linalg_qr(lt_tensor* a, const char* mode, lt_tensor** Q, lt_tensor** R);
+int lt_linalg_lu(lt_tensor* a, lt_tensor** P, lt_tensor** L, lt_tensor** U);
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v);
 lt_tensor* lt_outer(lt_tensor* a, lt_tensor* b);
 lt_tensor* lt_addmm(lt_tensor* self, lt_tensor* a, lt_tensor* b,

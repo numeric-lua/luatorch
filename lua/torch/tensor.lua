@@ -1249,6 +1249,25 @@ function Tensor:qr(mode)
   return wrap(q_pointer[0]), wrap(r_pointer[0])
 end
 
+-- LU decomposition with partial pivoting. Returns P, L, U such that
+-- A = P L U for square and rectangular matrices, with an optional batch
+-- dimension. CPU LAPACK only implements the pivoted float32/float64 path:
+-- other dtypes and the unpivoted variant are not exposed.
+function Tensor:lu()
+  if self:dim() < 2 then
+    error("lu expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("lu supports float32 and float64 tensors", 3)
+  end
+  local p_pointer = ffi.new("lt_tensor*[1]")
+  local l_pointer = ffi.new("lt_tensor*[1]")
+  local u_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_lu(self.h, p_pointer, l_pointer, u_pointer))
+  return wrap(p_pointer[0]), wrap(l_pointer[0]), wrap(u_pointer[0])
+end
+
 -- Integer matrix powers for square and batched square matrices. Binary
 -- exponentiation keeps the autograd graph shallow; a negative exponent
 -- inverts first, and exponent zero returns a fresh identity.

@@ -2177,6 +2177,21 @@ int lt_linalg_qr(lt_tensor* a, const char* mode, lt_tensor** Q, lt_tensor** R) {
   LT_CATCH_INT
 }
 
+int lt_linalg_lu(lt_tensor* a, lt_tensor** P, lt_tensor** L, lt_tensor** U) {
+  try {
+    clear_error();
+    if (P == nullptr || L == nullptr || U == nullptr) {
+      throw std::runtime_error("lu: null output pointer");
+    }
+    auto result = at::linalg_lu(a->t);
+    *P = wrap(std::get<0>(result));
+    *L = wrap(std::get<1>(result));
+    *U = wrap(std::get<2>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v) {
   try {
     clear_error();
