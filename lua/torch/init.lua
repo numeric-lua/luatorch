@@ -748,6 +748,7 @@ torch.linalg = {
     return lu:lu_solve(pivots, b, opts)
   end,
   pinv = function(a, opts) return a:pinv(opts) end,
+  matrix_exp = function(a) return a:matrix_exp() end,
   matrix_power = function(a, n) return a:matrix_power(n) end,
   vector_norm = function(a, ord, dim, keepdim)
     if not Tensor.is_tensor(a) then

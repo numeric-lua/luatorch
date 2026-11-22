@@ -2235,6 +2235,14 @@ lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
   LT_CATCH_NULL
 }
 
+lt_tensor* lt_linalg_matrix_exp(lt_tensor* a) {
+  try {
+    clear_error();
+    return wrap(at::linalg_matrix_exp(a->t));
+  }
+  LT_CATCH_NULL
+}
+
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v) {
   try {
     clear_error();

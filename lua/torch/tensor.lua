@@ -1398,6 +1398,25 @@ function Tensor:pinv(opts)
     atol ~= nil and 1 or 0, rtol ~= nil and 1 or 0))
 end
 
+-- Matrix exponential through ATen's `linalg_matrix_exp` (scaling and
+-- squaring). The input is a square matrix or a batch of square matrices;
+-- the output has the same shape and dtype. Only real float32/float64 are
+-- exposed: ATen accepts float16, but its half-precision accumulation
+-- overflows for modest norms, so half is rejected instead of returning inf.
+function Tensor:matrix_exp()
+  if self:dim() < 2 then
+    error("matrix_exp expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("matrix_exp expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("matrix_exp supports float32 and float64 tensors", 3)
+  end
+  return wrap(lib.lt_linalg_matrix_exp(self.h))
+end
+
 -- Integer matrix powers for square and batched square matrices. Binary
 -- exponentiation keeps the autograd graph shallow; a negative exponent
 -- inverts first, and exponent zero returns a fresh identity.
