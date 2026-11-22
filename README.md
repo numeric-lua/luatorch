@@ -142,6 +142,17 @@ print(x:totable(), rank:item())   -- {1, 2}, 2
 See [docs/api.md](docs/api.md) for driver and `rcond` semantics; the solution
 is differentiable.
 
+`torch.linalg.solve_triangular` solves a triangular system and requires an
+explicit `upper` flag, so a lower/upper mix-up cannot silently return a wrong
+answer. Vector and matrix right-hand sides are supported, and gradients flow
+to both the matrix and the right-hand side:
+
+```lua
+local a = torch.tensor({{2, 0}, {1, 3}}, {dtype = torch.float64})
+local b = torch.tensor({2, 4}, {dtype = torch.float64})
+print(a:solve_triangular(b, {upper = false}):totable())  -- {1, 1}
+```
+
 `torch.linalg.matrix_power` raises a square matrix to an integer power, and
 `torch.trapezoid` integrates a tensor along one dimension with the trapezoidal
 rule. Both support autograd and batched `matrix_power`:
@@ -172,11 +183,13 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.21.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.22.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **417 tests**. The 0.21
-> additions are `torch.linalg.matrix_power` and `torch.trapezoid` with
-> autograd, tests, docs, and benchmark coverage. The 0.20
+> first-order fused backward, fused reductions, and **423 tests**. The 0.22
+> additions are `torch.linalg.solve_triangular` with a required `upper` flag,
+> batched and right-side solves, autograd, tests, docs, and benchmark coverage.
+> The 0.21 additions are `torch.linalg.matrix_power` and `torch.trapezoid`
+> with autograd, tests, docs, and benchmark coverage. The 0.20
 > additions are `torch.linalg.lstsq` with driver/rcond support, autograd and
 > benchmark coverage, and the related docs guards. The 0.19
 > additions are `torch.linalg.slogdet`, autograd coverage for einsum, float16,
@@ -300,7 +313,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Dtypes | float32/64/16, int8/16/32/64, uint8, bool; Torch7 typed constructors |
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `det`, `solve`, `lstsq`, `cholesky`, `svd`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `det`, `solve`, `solve_triangular`, `lstsq`, `cholesky`, `svd`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

@@ -1,4 +1,4 @@
-# luatorch API reference (0.21.0)
+# luatorch API reference (0.22.0)
 
 All examples assume:
 
@@ -321,6 +321,7 @@ a:inverse()
 a:det()
 a:slogdet()         -- returns sign, logabsdet; batched and differentiable
 a:solve(b)          -- solve a x = b (b may be a vector or matrix)
+a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:svd(full_matrices?)  -- returns U, S, Vh
@@ -329,6 +330,7 @@ a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.matrix_power(a, n)
 ```
@@ -338,6 +340,24 @@ so it stays finite for very large or small magnitudes. `sign` is `-1`, `0`, or
 `1`; `logabsdet` is real. For a square matrix `exp(logabsdet) * sign == det`,
 and gradients flow through `logabsdet` as `A^{-T}`. Batched inputs return
 `sign` and `logabsdet` with the batch dimensions; square matrices are required.
+
+`solve_triangular` solves `A X = B` when `left` is true (the default) and
+`X A = B` when it is false, assuming `A` is triangular. It requires an options
+table with `upper` set to a boolean, so a lower/upper mix-up cannot silently
+produce a wrong answer; `left` defaults to true and `unitriangular` defaults to
+false, in which case the stored diagonal is treated as ones. For a left solve,
+`B` may be 1-D of length `n` or have shape `(*, n, k)`; for a right solve it
+must be at least 2-D with shape `(*, k, n)`. Batch dimensions broadcast. Only
+float32 and float64 are accepted because CPU LAPACK has no half-precision
+triangular solve, and both operands must share the dtype. The solution is
+differentiable with respect to both `A` and `B`, and gradients with respect to
+the unused triangle are zero.
+
+```lua
+local a = torch.tensor({{2, 0}, {1, 3}}, {dtype = torch.float64})
+local b = torch.tensor({2, 4}, {dtype = torch.float64})
+print(a:solve_triangular(b, {upper = false}):totable())  -- {1, 1}
+```
 
 `lstsq` minimizes `||A x - b||` and returns four values: `solution`,
 `residuals`, `rank`, and `singular_values`. For a matrix `A` of shape
@@ -690,6 +710,6 @@ torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.21.0")
+torch.VERSION             -- luatorch version string ("0.22.0")
 torch.version             -- libtorch version string
 ```

@@ -3,6 +3,28 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.22.0] — 2026-11-22
+
+### Added
+
+- `torch.linalg.solve_triangular` / `Tensor:solve_triangular(b, opts)` backed
+  by `at::linalg_solve_triangular`; `opts.upper` is required, `left` defaults
+  to true, `unitriangular` defaults to false, vector and matrix right-hand
+  sides plus broadcast batch dimensions are supported, and float32/float64
+  inputs are required because CPU LAPACK has no half-precision triangular
+  solve;
+- six tests covering lower/upper/unitriangular solves, vector and batched
+  right-hand sides, right-side (`left = false`) solves, analytic gradients,
+  agreement with full `solve` on the stored triangle, and option/shape/dtype
+  errors;
+- benchmark entries for `solve_triangular` forward and forward+backward.
+
+### Changed
+
+- docs and README describe the required `upper` option, right-hand-side
+  layouts, dtype restrictions, and autograd behavior; the API documentation
+  test guards the new `torch.linalg.solve_triangular` alias.
+
 ## [0.21.0] — 2026-11-21
 
 ### Added
