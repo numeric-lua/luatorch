@@ -1116,6 +1116,81 @@ function Tensor:solve(other)
   return wrap(lib.lt_linalg_solve(self.h, other.h))
 end
 
+local solve_triangular_options = {
+  upper = true,
+  left = true,
+  unitriangular = true,
+}
+
+-- Solve A X = B (or X A = B when left is false) where A is triangular.
+-- `upper` is required so a lower/upper mix-up cannot silently produce a
+-- plausible-looking but wrong answer. Only float32/float64 are accepted:
+-- CPU LAPACK has no half-precision triangular solve.
+function Tensor:solve_triangular(other, opts)
+  if not is_tensor(other) then
+    error("solve_triangular expects a tensor right-hand side", 3)
+  end
+  if opts == nil then
+    error("solve_triangular requires options with an upper boolean", 3)
+  elseif type(opts) ~= "table" then
+    error("solve_triangular options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not solve_triangular_options[name] then
+      error("solve_triangular got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  if type(opts.upper) ~= "boolean" then
+    error("solve_triangular upper must be a boolean", 3)
+  end
+  for _, name in ipairs({ "left", "unitriangular" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("solve_triangular " .. name .. " must be a boolean", 3)
+    end
+  end
+  if self:dim() < 2 or self:size(-2) ~= self:size(-1) then
+    error("solve_triangular expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("solve_triangular supports float32 and float64 tensors", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("solve_triangular expects the right-hand side to match the " ..
+      "matrix dtype", 3)
+  end
+  local n = self:size(-1)
+  local left = opts.left ~= false
+  local upper = opts.upper
+  local unitriangular = opts.unitriangular == true
+  if other:dim() == 1 then
+    if not left then
+      error("solve_triangular requires a 2-D right-hand side when left " ..
+        "is false", 3)
+    end
+    if other:size(1) ~= n then
+      error("solve_triangular right-hand side has the wrong length", 3)
+    end
+    local solution = wrap(lib.lt_linalg_solve_triangular(
+      self.h, other:unsqueeze(2).h, upper and 1 or 0, 1,
+      unitriangular and 1 or 0))
+    return solution:squeeze(2)
+  end
+  if other:dim() < 2 then
+    error("solve_triangular expects a vector or matrix right-hand side", 3)
+  end
+  if left then
+    if other:size(-2) ~= n then
+      error("solve_triangular right-hand side has the wrong number of rows", 3)
+    end
+  elseif other:size(-1) ~= n then
+    error("solve_triangular right-hand side has the wrong number of columns", 3)
+  end
+  return wrap(lib.lt_linalg_solve_triangular(
+    self.h, other.h, upper and 1 or 0, left and 1 or 0,
+    unitriangular and 1 or 0))
+end
+
 local lstsq_drivers = {
   gels = true,
   gelsy = true,

@@ -735,6 +735,9 @@ torch.linalg = {
   det = function(a) return a:det() end,
   slogdet = function(a) return a:slogdet() end,
   solve = function(a, b) return a:solve(b) end,
+  solve_triangular = function(a, b, opts)
+    return a:solve_triangular(b, opts)
+  end,
   lstsq = function(a, b, opts) return a:lstsq(b, opts) end,
   cholesky = function(a, upper) return a:cholesky(upper) end,
   svd = function(a, full_matrices) return a:svd(full_matrices) end,

@@ -150,6 +150,9 @@ int lt_linalg_lstsq(lt_tensor* a, lt_tensor* b, const char* driver,
                     lt_tensor** solution, lt_tensor** residuals,
                     lt_tensor** rank, lt_tensor** singular_values);
 lt_tensor* lt_linalg_solve(lt_tensor* a, lt_tensor* b);
+lt_tensor* lt_linalg_solve_triangular(lt_tensor* a, lt_tensor* b,
+                                      int upper, int left,
+                                      int unitriangular);
 lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper);
 int lt_linalg_svd(lt_tensor* a, int full_matrices,
                   lt_tensor** U, lt_tensor** S, lt_tensor** Vh);

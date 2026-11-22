@@ -2127,6 +2127,17 @@ lt_tensor* lt_linalg_solve(lt_tensor* a, lt_tensor* b) {
   LT_CATCH_NULL
 }
 
+lt_tensor* lt_linalg_solve_triangular(lt_tensor* a, lt_tensor* b,
+                                      int upper, int left,
+                                      int unitriangular) {
+  try {
+    clear_error();
+    return wrap(at::linalg_solve_triangular(
+        a->t, b->t, upper != 0, left != 0, unitriangular != 0));
+  }
+  LT_CATCH_NULL
+}
+
 lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper) {
   try {
     clear_error();
