@@ -1295,3 +1295,155 @@ test("pinv validates shapes, dtypes, and options", function()
     matrix:pinv({ rtol = "small" })
   end, "rtol must be a non-negative")
 end)
+
+test("matrix_exp computes known exponentials", function()
+  local zero = torch.zeros(2, 2, { dtype = torch.float64 })
+  assert_tensor(zero:matrix_exp(), { { 1, 0 }, { 0, 1 } }, 1e-12)
+
+  -- A nilpotent matrix terminates the series: exp(N) = I + N.
+  local nilpotent = float_matrix({ { 0, 1 }, { 0, 0 } })
+  assert_tensor(nilpotent:matrix_exp(), { { 1, 1 }, { 0, 1 } }, 1e-12)
+
+  local diagonal = float_matrix({ { 0.25, 0 }, { 0, 0.5 } })
+  assert_tensor(diagonal:matrix_exp(), {
+    { math.exp(0.25), 0 },
+    { 0, math.exp(0.5) },
+  }, 1e-12)
+
+  -- The generator of planar rotations exponentiates to a rotation.
+  local angle = math.pi / 2
+  local generator = float_matrix({ { 0, -angle }, { angle, 0 } })
+  assert_tensor(generator:matrix_exp(), {
+    { math.cos(angle), -math.sin(angle) },
+    { math.sin(angle), math.cos(angle) },
+  }, 1e-12)
+
+  local scalar = float_matrix({ { 2 } })
+  assert_tensor(scalar:matrix_exp(), { { math.exp(2) } }, 1e-12)
+
+  -- Non-contiguous square inputs use the same kernel.
+  local transposed = nilpotent:t()
+  assert_tensor(transposed:matrix_exp(), { { 1, 0 }, { 1, 1 } }, 1e-12)
+
+  assert_tensor(torch.linalg.matrix_exp(nilpotent),
+    nilpotent:matrix_exp():totable(), 0)
+end)
+
+test("matrix_exp satisfies exp(A) exp(-A) = I and det(exp(A)) = exp(tr A)",
+    function()
+  local a = float_matrix({ { 1, 2 }, { 3, 4 } })
+  local exponential = a:matrix_exp()
+  local inverse_exponential = (-a):matrix_exp()
+  assert_tensor(exponential:matmul(inverse_exponential), {
+    { 1, 0 },
+    { 0, 1 },
+  }, 1e-12)
+  assert_tensor(inverse_exponential:matmul(exponential), {
+    { 1, 0 },
+    { 0, 1 },
+  }, 1e-12)
+  assert_near(exponential:det():item(), math.exp(5), 1e-9)
+end)
+
+test("matrix_exp handles batches, empty matrices, and dtypes", function()
+  local batch = torch.tensor({
+    { { 0, 0 }, { 0, 0 } },
+    { { 1, 0 }, { 0, 2 } },
+  }, { dtype = torch.float64 })
+  local exponentials = batch:matrix_exp()
+  assert_shape(exponentials, { 2, 2, 2 })
+  assert_tensor(exponentials, {
+    { { 1, 0 }, { 0, 1 } },
+    { { math.exp(1), 0 }, { 0, math.exp(2) } },
+  }, 1e-12)
+
+  assert_dtype(batch:matrix_exp(), "float64")
+  assert_dtype(torch.ones(2, 2):matrix_exp(), "float32")
+
+  local dtype = { dtype = torch.float64 }
+  assert_shape(torch.zeros(0, 0, dtype):matrix_exp(), { 0, 0 })
+  assert_shape(torch.zeros(4, 0, 0, dtype):matrix_exp(), { 4, 0, 0 })
+  assert_shape(torch.zeros(2, 0, 3, 3, dtype):matrix_exp(), { 2, 0, 3, 3 })
+end)
+
+test("matrix_exp gradients match central differences", function()
+  local values = { { 0.3, -0.2 }, { 0.4, 0.1 } }
+  local weight = float_matrix({ { 1, 2 }, { 3, 4 } })
+  local a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local exponential = a:matrix_exp()
+  assert_true(exponential:requires_grad(), "matrix_exp carries gradients")
+  local loss = (exponential * weight):sum()
+  loss:backward()
+  assert_shape(a:grad(), { 2, 2 })
+
+  local eps = 1e-6
+  local function weighted_loss(matrix_values)
+    local tensor = torch.tensor(matrix_values, { dtype = torch.float64 })
+    return (tensor:matrix_exp() * weight):sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      local plus = { { values[1][1], values[1][2] },
+        { values[2][1], values[2][2] } }
+      local minus = { { values[1][1], values[1][2] },
+        { values[2][1], values[2][2] } }
+      plus[i][j] = plus[i][j] + eps
+      minus[i][j] = minus[i][j] - eps
+      local numeric = (weighted_loss(plus) - weighted_loss(minus)) /
+        (2 * eps)
+      assert_near(a:grad():get(i, j), numeric, 1e-6,
+        string.format("d matrix_exp loss / d A[%d][%d]", i, j))
+    end
+  end
+
+  -- At A = 0, d/dA (exp(A) * W) = W, which gives an exact analytic check.
+  local zero = torch.zeros(2, 2, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local zero_loss = (zero:matrix_exp() * weight):sum()
+  zero_loss:backward()
+  assert_tensor(zero:grad(), weight:totable(), 1e-12)
+
+  -- Batched losses differentiate each matrix with the weight broadcast.
+  local batch = torch.tensor({
+    { { 0.1, 0.2 }, { -0.3, 0.4 } },
+    { { 0.5, -0.1 }, { 0.2, 0.3 } },
+  }, { dtype = torch.float64, requires_grad = true })
+  local batch_loss = (batch:matrix_exp() * weight):sum()
+  batch_loss:backward()
+  assert_shape(batch:grad(), { 2, 2, 2 })
+
+  local f32 = torch.randn(2, 2, { requires_grad = true })
+  local f32_output = f32:matrix_exp()
+  f32_output:sum():backward()
+  assert_dtype(f32_output, "float32")
+  assert_dtype(f32:grad(), "float32")
+end)
+
+test("matrix_exp validates shapes and dtypes", function()
+  assert_error(function()
+    torch.ones(3):matrix_exp()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.tensor(1.0):matrix_exp()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 3):matrix_exp()
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, 3):matrix_exp()
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):matrix_exp()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):matrix_exp()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.tensor({ { true, false }, { false, true } }):matrix_exp()
+  end, "float32 and float64")
+end)
