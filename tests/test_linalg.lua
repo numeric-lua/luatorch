@@ -34,6 +34,248 @@ test("solve", function()
   }, 1e-9)
 end)
 
+test("solve_triangular solves lower, upper, and unitriangular systems", function()
+  local lower = float_matrix({
+    { 2, 0, 0 },
+    { 1, 3, 0 },
+    { 4, -1, 5 },
+  })
+  local expected = float_matrix({
+    { 1, 2 },
+    { 3, 4 },
+    { 5, 6 },
+  })
+  local rhs = lower:matmul(expected)
+  assert_tensor(lower:solve_triangular(rhs, { upper = false }),
+    expected:totable(), 1e-12)
+  assert_tensor(torch.linalg.solve_triangular(lower, rhs, { upper = false }),
+    expected:totable(), 1e-12)
+
+  local vector = lower:mv(torch.tensor({ 1, 2, 3 }, { dtype = torch.float64 }))
+  assert_tensor(lower:solve_triangular(vector, { upper = false }),
+    { 1, 2, 3 }, 1e-12)
+
+  local upper = lower:t()
+  assert_tensor(upper:solve_triangular(upper:matmul(expected), { upper = true }),
+    expected:totable(), 1e-12)
+
+  -- unitriangular ignores the stored diagonal and solves with ones instead.
+  local stored = float_matrix({
+    { 9, 0, 0 },
+    { 1, 8, 0 },
+    { 4, -1, 7 },
+  })
+  local unit = float_matrix({
+    { 1, 0, 0 },
+    { 1, 1, 0 },
+    { 4, -1, 1 },
+  })
+  assert_tensor(stored:solve_triangular(unit:matmul(expected), {
+    upper = false,
+    unitriangular = true,
+  }), expected:totable(), 1e-12)
+end)
+
+test("solve_triangular handles batched and broadcast right-hand sides", function()
+  local matrices = {
+    { { 3, 0, 0 }, { 1, 4, 0 }, { -1, 2, 5 } },
+    { { 2, 0, 0 }, { 3, 6, 0 }, { 1, -2, 7 } },
+  }
+  local expected = {
+    { { 1, 2 }, { 3, 4 }, { 5, 6 } },
+    { { -1, 3 }, { 2, 0 }, { 4, -2 } },
+  }
+  local a = torch.tensor(matrices, { dtype = torch.float64 })
+  local x = torch.tensor(expected, { dtype = torch.float64 })
+  local rhs = a:matmul(x)
+  assert_shape(rhs, { 2, 3, 2 })
+  assert_tensor(a:solve_triangular(rhs, { upper = false }),
+    expected, 1e-12)
+
+  -- An unbatched RHS broadcasts across the batch dimension.
+  local first_rhs = torch.tensor(matrices[1], { dtype = torch.float64 })
+    :matmul(x:select(1, 1))
+  local broadcast = a:solve_triangular(first_rhs, { upper = false })
+  assert_shape(broadcast, { 2, 3, 2 })
+  assert_tensor(broadcast:select(1, 1), expected[1], 1e-12)
+  assert_tensor(broadcast:select(1, 2),
+    torch.tensor(matrices[2], { dtype = torch.float64 })
+      :solve_triangular(first_rhs, { upper = false }):totable(), 1e-12)
+end)
+
+test("solve_triangular solves right-side systems", function()
+  local a = float_matrix({ { 2, 0 }, { 1, 3 } })
+  local x = float_matrix({
+    { 1, 2 },
+    { 3, 4 },
+    { 5, 6 },
+  })
+  local rhs = x:matmul(a)
+  assert_shape(rhs, { 3, 2 })
+  assert_tensor(a:solve_triangular(rhs, { upper = false, left = false }),
+    x:totable(), 1e-12)
+
+  local matrices = {
+    { { 2, 0 }, { 1, 3 } },
+    { { 4, 0 }, { 2, 6 } },
+  }
+  local batch_a = torch.tensor(matrices, { dtype = torch.float64 })
+  local batch_x = torch.tensor({
+    { { 1, 2 }, { 3, 4 } },
+    { { 5, 6 }, { 7, 8 } },
+  }, { dtype = torch.float64 })
+  local batch_rhs = batch_x:matmul(batch_a)
+  assert_shape(batch_rhs, { 2, 2, 2 })
+  assert_tensor(batch_a:solve_triangular(batch_rhs,
+    { upper = false, left = false }), batch_x:totable(), 1e-12)
+end)
+
+test("solve_triangular gradients match the implicit function", function()
+  local a = torch.tensor({ { 2, 0 }, { 1, 3 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local b = torch.tensor({ { 2 }, { 4 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local weights = float_matrix({ { 3 }, { -1 } })
+  local x = a:solve_triangular(b, { upper = false })
+  assert_tensor(x, { { 1 }, { 1 } }, 1e-12)
+  local loss = (x * weights):sum()
+  loss:backward()
+
+  -- For A X = B, with G = A^-T dL/dX: dL/dB = G and
+  -- dL/dA = -G X^T, masked to the stored triangle.
+  assert_tensor(a:grad(), {
+    { -5 / 3, 0 },
+    { 1 / 3, 1 / 3 },
+  }, 1e-12)
+  assert_tensor(b:grad(), { { 5 / 3 }, { -1 / 3 } }, 1e-12)
+end)
+
+test("solve_triangular gradients match a full solve on the triangle", function()
+  local values = {
+    { 4, 0, 0 },
+    { 2, 5, 0 },
+    { -1, 3, 6 },
+  }
+  local rhs_values = {
+    { 1, 2 },
+    { 3, 4 },
+    { 5, 6 },
+  }
+  local weights = float_matrix({
+    { 0.5, -1 },
+    { 2, 0.25 },
+    { -3, 1.5 },
+  })
+
+  local triangular_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local triangular_b = torch.tensor(rhs_values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local triangular_x = triangular_a:solve_triangular(triangular_b,
+    { upper = false })
+  local triangular_loss = (triangular_x * weights):sum()
+  triangular_loss:backward()
+
+  local full_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local full_b = torch.tensor(rhs_values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local full_x = full_a:solve(full_b)
+  local full_loss = (full_x * weights):sum()
+  full_loss:backward()
+
+  assert_tensor(triangular_x, full_x:totable(), 1e-12)
+  assert_tensor(triangular_b:grad(), full_b:grad():totable(), 1e-12)
+  for i = 1, 3 do
+    for j = 1, 3 do
+      if j <= i then
+        assert_near(triangular_a:grad():get(i, j),
+          full_a:grad():get(i, j), 1e-12)
+      else
+        assert_near(triangular_a:grad():get(i, j), 0, 1e-15,
+          "upper-triangle gradient should stay zero")
+      end
+    end
+  end
+end)
+
+test("solve_triangular validates options, shapes, and dtypes", function()
+  local a = float_matrix({ { 2, 0 }, { 1, 3 } })
+  local b = float_matrix({ { 2 }, { 4 } })
+  assert_error(function()
+    a:solve_triangular(b)
+  end, "requires options")
+  assert_error(function()
+    a:solve_triangular(b, {})
+  end, "upper must be a boolean")
+  assert_error(function()
+    a:solve_triangular(b, { upper = 1 })
+  end, "upper must be a boolean")
+  assert_error(function()
+    a:solve_triangular(b, { upper = false, left = 1 })
+  end, "left must be a boolean")
+  assert_error(function()
+    a:solve_triangular(b, { upper = false, unitriangular = 1 })
+  end, "unitriangular must be a boolean")
+  assert_error(function()
+    a:solve_triangular(b, { upper = false, transpose = true })
+  end, "unknown option")
+  assert_error(function()
+    a:solve_triangular(b, "upper")
+  end, "options must be a table")
+  assert_error(function()
+    a:solve_triangular({ 2, 4 })
+  end, "tensor right-hand side")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):solve_triangular(b,
+      { upper = false })
+  end, "square matrices")
+  assert_error(function()
+    a:solve_triangular(torch.ones(3, 1, { dtype = torch.float64 }),
+      { upper = false })
+  end, "wrong number of rows")
+  assert_error(function()
+    a:solve_triangular(torch.ones(2, 3, { dtype = torch.float64 }),
+      { upper = false, left = false })
+  end, "wrong number of columns")
+  assert_error(function()
+    a:solve_triangular(torch.ones(2, { dtype = torch.float64 }),
+      { upper = false, left = false })
+  end, "2-D right-hand side")
+  assert_error(function()
+    a:solve_triangular(torch.ones(3, { dtype = torch.float64 }),
+      { upper = false })
+  end, "wrong length")
+  assert_error(function()
+    a:solve_triangular(torch.ones(2, 1, { dtype = torch.float32 }),
+      { upper = false })
+  end, "match the matrix dtype")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):solve_triangular(
+      torch.ones(2, 1, { dtype = torch.int64 }), { upper = false })
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):solve_triangular(
+      torch.ones(2, 1, { dtype = torch.float16 }), { upper = false })
+  end, "float32 and float64")
+  assert_error(function()
+    a:solve_triangular(torch.tensor(1.0, { dtype = torch.float64 }),
+      { upper = false })
+  end, "vector or matrix")
+end)
+
 test("cholesky", function()
   local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
   local lower = matrix:cholesky()
