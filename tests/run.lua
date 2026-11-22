@@ -154,6 +154,7 @@ local files = {
   "test_fusetrain.lua",
   "test_fusereduce.lua",
   "test_linalg.lua",
+  "test_linalg_helpers.lua",
   "test_random.lua",
   "test_autograd.lua",
   "test_nn.lua",

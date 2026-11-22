@@ -1097,6 +1097,211 @@ end
 
 -- Linear algebra ------------------------------------------------------------
 
+local function zeros_tensor(shape, dtype)
+  local array, ndim = shape_to_cdata(shape)
+  return wrap(lib.lt_zeros(ndim, array, dtype))
+end
+
+local function arange_tensor(start, stop, dtype)
+  return wrap(lib.lt_arange(start, stop, 1, dtype))
+end
+
+local function stack_tensors(tensors, dim)
+  local count = #tensors
+  if count == 0 then
+    error("cannot stack an empty tensor list", 3)
+  end
+  local array = ffi.new("lt_tensor*[?]", count)
+  for i = 1, count do
+    array[i - 1] = tensors[i].h
+  end
+  return wrap(lib.lt_stack(array, count, dim))
+end
+
+local function einstein_unary(tensor, equation)
+  local array = ffi.new("lt_tensor*[?]", 1)
+  array[0] = tensor.h
+  return wrap(lib.lt_einsum(array, 1, equation))
+end
+
+local function integer_argument(value, name, minimum)
+  if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+      value == math.huge or value == -math.huge then
+    error(name .. " must be an integer", 3)
+  end
+  value = math.floor(value)
+  if value < minimum then
+    error(string.format("%s must be at least %d", name, minimum), 3)
+  end
+  return value
+end
+
+local function dimension_argument(value, rank, name)
+  if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+      value == math.huge or value == -math.huge then
+    error(name .. " must be an integer dimension", 3)
+  end
+  local dim = math.floor(value)
+  if dim < 0 then
+    dim = rank + dim + 1
+  end
+  if dim < 1 or dim > rank then
+    error(string.format("%s dimension out of range (got %d, expected 1..%d)",
+      name, value, rank), 3)
+  end
+  return dim
+end
+
+local lu_unpack_options = {
+  unpack_data = true,
+  unpack_pivots = true,
+}
+
+local function validate_pivot_values(values, m, what)
+  for i = 1, #values do
+    local value = values[i]
+    if type(value) ~= "number" or value % 1 ~= 0 or value < 1 or value > m then
+      error(string.format(
+        "lu_unpack expects 1-based pivot indices in 1..%d at %s[%d]",
+        m, what, i), 3)
+    end
+  end
+end
+
+local function validate_unpack_pivots(lu, pivots)
+  if not is_tensor(pivots) then
+    error("lu_unpack expects an int32 pivots tensor", 3)
+  end
+  if pivots:dtype() ~= "int32" then
+    error("lu_unpack expects pivots with int32 dtype", 3)
+  end
+  local rank = lu:dim()
+  if pivots:dim() ~= rank - 1 then
+    error("lu_unpack expects pivots with one dimension less than LU", 3)
+  end
+  for dim = 1, rank - 2 do
+    if pivots:size(dim) ~= lu:size(dim) then
+      error("lu_unpack expects pivots to match the LU batch dimensions", 3)
+    end
+  end
+  local m, n = lu:size(-2), lu:size(-1)
+  local k = math.min(m, n)
+  if pivots:size(-1) ~= k then
+    error("lu_unpack pivots have the wrong length", 3)
+  end
+  local function walk(node, path)
+    if type(node) ~= "table" or #node == 0 then return end
+    if type(node[1]) == "table" then
+      for i = 1, #node do
+        walk(node[i], string.format("%s[%d]", path, i))
+      end
+    else
+      validate_pivot_values(node, m, path)
+    end
+  end
+  walk(pivots:totable(), "pivots")
+  return k
+end
+
+local function permutation_matrix(values, m, k, dtype)
+  local perm = {}
+  for i = 1, m do perm[i] = i end
+  for i = k, 1, -1 do
+    local j = values[i]
+    perm[i], perm[j] = perm[j], perm[i]
+  end
+  local matrix = zeros_tensor({ m, m }, dtype)
+  for i = 1, m do
+    matrix:set(i, perm[i], 1)
+  end
+  return matrix
+end
+
+-- Unpack the compact LU factorization returned by lu_factor into P, L, and U
+-- with A = P L U. L and U are built with differentiable tensor arithmetic, so
+-- gradients flow through the packed factor; P depends only on the integer
+-- pivots and is detached, matching lu().
+function Tensor:lu_unpack(pivots, opts)
+  if self:dim() < 2 then
+    error("lu_unpack expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("lu_unpack supports float32 and float64 tensors", 3)
+  end
+  local k = validate_unpack_pivots(self, pivots)
+
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("lu_unpack options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not lu_unpack_options[name] then
+      error("lu_unpack got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  for _, name in ipairs({ "unpack_data", "unpack_pivots" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("lu_unpack " .. name .. " must be a boolean", 3)
+    end
+  end
+
+  local dtype_id = self:dtype_id()
+  local m, n = self:size(-2), self:size(-1)
+  local unpack_data = opts.unpack_data ~= false
+  local unpack_pivots = opts.unpack_pivots ~= false
+
+  local p
+  if unpack_pivots then
+    local batch_shape = {}
+    for dim = 1, self:dim() - 2 do
+      batch_shape[dim] = self:size(dim)
+    end
+    local batch_count = 1
+    for i = 1, #batch_shape do
+      batch_count = batch_count * batch_shape[i]
+    end
+    if batch_count == 0 then
+      batch_shape[#batch_shape + 1] = m
+      batch_shape[#batch_shape + 1] = m
+      p = zeros_tensor(batch_shape, dtype_id)
+    else
+      local flat = pivots:reshape(batch_count, k)
+      local parts = {}
+      for batch = 1, batch_count do
+        parts[batch] = permutation_matrix(
+          flat:select(1, batch):totable(), m, k, dtype_id)
+      end
+      p = stack_tensors(parts, 0)
+      batch_shape[#batch_shape + 1] = m
+      batch_shape[#batch_shape + 1] = m
+      p = p:reshape(batch_shape)
+    end
+  else
+    p = zeros_tensor({ 0 }, dtype_id)
+  end
+
+  local l, u
+  if unpack_data then
+    local rows = arange_tensor(1, m + 1, dtype_id):unsqueeze(2)
+    local cols = arange_tensor(1, k + 1, dtype_id):unsqueeze(1)
+    local lower = rows:gt(cols):to(dtype_id)
+    local diagonal = rows:eq(cols):to(dtype_id)
+    l = self:narrow(-1, 1, k) * lower + diagonal
+
+    rows = arange_tensor(1, k + 1, dtype_id):unsqueeze(2)
+    cols = arange_tensor(1, n + 1, dtype_id):unsqueeze(1)
+    local upper = rows:le(cols):to(dtype_id)
+    u = self:narrow(-2, 1, k) * upper
+  else
+    l = zeros_tensor({ 0 }, dtype_id)
+    u = zeros_tensor({ 0 }, dtype_id)
+  end
+
+  return p, l, u
+end
+
 function Tensor:inverse()
   return wrap(lib.lt_linalg_inv(self.h))
 end
@@ -1463,6 +1668,165 @@ function Tensor:matrix_power(exponent)
     end
   end
   return result
+end
+
+-- Vandermonde matrix. Tensor:vander treats every row of the last dimension
+-- as a vector and appends the N powers as a new last dimension. The default
+-- order is increasing (x^0 .. x^(N-1)); torch.vander uses the historical
+-- decreasing order instead. Powers are built with ordinary tensor arithmetic,
+-- so gradients flow through the input.
+function Tensor:vander(N, increasing)
+  if self:dim() < 1 then
+    error("vander expects a tensor with at least one dimension", 3)
+  end
+  if self:dtype() == "bool" then
+    error("vander does not support bool tensors", 3)
+  end
+  if N == nil then
+    N = self:size(-1)
+  else
+    N = integer_argument(N, "vander N", 0)
+  end
+  if increasing == nil then increasing = true end
+  if type(increasing) ~= "boolean" then
+    error("vander increasing must be a boolean", 3)
+  end
+  local shape = self:sizes()
+  if N == 0 then
+    shape[#shape + 1] = 0
+    return zeros_tensor(shape, self:dtype_id())
+  end
+  local powers = {}
+  if increasing then
+    for power = 0, N - 1 do
+      powers[#powers + 1] = self:pow(power)
+    end
+  else
+    for power = N - 1, 0, -1 do
+      powers[#powers + 1] = self:pow(power)
+    end
+  end
+  return stack_tensors(powers, self:dim())
+end
+
+-- Cross product of two real 3-vectors along `dim`. Inputs keep their rank and
+-- broadcast over the other dimensions, matching torch.linalg.cross. The
+-- components are ordinary tensor arithmetic, so autograd is preserved.
+function Tensor:cross(other, dim)
+  if not is_tensor(other) then
+    error("cross expects a tensor", 3)
+  end
+  if self:dtype() == "bool" or other:dtype() == "bool" then
+    error("cross does not support bool tensors", 3)
+  end
+  if self:dtype_id() ~= other:dtype_id() then
+    error("cross expects both inputs to have the same dtype", 3)
+  end
+  local rank = self:dim()
+  if rank < 1 then
+    error("cross expects tensors with at least one dimension", 3)
+  end
+  if other:dim() ~= rank then
+    error("cross expects inputs with the same number of dimensions", 3)
+  end
+  dim = dim == nil and -1 or dim
+  local axis = dimension_argument(dim, rank, "cross")
+  if self:size(axis) ~= 3 or other:size(axis) ~= 3 then
+    error(string.format("cross expects dimension %d to have length 3", axis), 3)
+  end
+  for i = 1, rank do
+    if i ~= axis and self:size(i) ~= other:size(i) and
+        self:size(i) ~= 1 and other:size(i) ~= 1 then
+      error(string.format(
+        "cross inputs are not broadcastable at dimension %d", i), 3)
+    end
+  end
+  local a1, a2, a3 = self:select(axis, 1), self:select(axis, 2),
+    self:select(axis, 3)
+  local b1, b2, b3 = other:select(axis, 1), other:select(axis, 2),
+    other:select(axis, 3)
+  return stack_tensors({
+    a2 * b3 - a3 * b2,
+    a3 * b1 - a1 * b3,
+    a1 * b2 - a2 * b1,
+  }, axis - 1)
+end
+
+-- Diagonal over two dimensions. The selected diagonal is appended as the last
+-- output dimension, and all other dimensions keep their order, matching
+-- torch.diagonal. The implementation permutes the two target dimensions to the
+-- end and uses an einsum trace, so it works for batches, offsets, and arbitrary
+-- dimension pairs while preserving autograd.
+function Tensor:diagonal(offset, dim1, dim2)
+  if self:dim() < 2 then
+    error("diagonal expects a tensor with at least two dimensions", 3)
+  end
+  if self:dtype() == "bool" then
+    error("diagonal does not support bool tensors", 3)
+  end
+  offset = offset == nil and 0 or offset
+  if type(offset) ~= "number" or offset ~= offset or offset % 1 ~= 0 or
+      offset == math.huge or offset == -math.huge then
+    error("diagonal offset must be an integer", 3)
+  end
+  offset = math.floor(offset)
+  local rank = self:dim()
+  local axis1 = dimension_argument(dim1 == nil and 1 or dim1, rank, "diagonal")
+  local axis2 = dimension_argument(dim2 == nil and 2 or dim2, rank, "diagonal")
+  if axis1 == axis2 then
+    error("diagonal dimensions must be different", 3)
+  end
+
+  local sizes = self:sizes()
+  local n1, n2 = sizes[axis1], sizes[axis2]
+  local start1, start2, length
+  if offset >= 0 then
+    length = math.max(0, math.min(n1, n2 - offset))
+    start1, start2 = 1, offset + 1
+  else
+    length = math.max(0, math.min(n1 + offset, n2))
+    start1, start2 = -offset + 1, 1
+  end
+
+  local batch_shape = {}
+  for dim = 1, rank do
+    if dim ~= axis1 and dim ~= axis2 then
+      batch_shape[#batch_shape + 1] = sizes[dim]
+    end
+  end
+  if length == 0 then
+    local out_shape = { unpack(batch_shape) }
+    out_shape[#out_shape + 1] = 0
+    return zeros_tensor(out_shape, self:dtype_id())
+  end
+
+  local narrowed = self:narrow(axis1, start1, length)
+  narrowed = narrowed:narrow(axis2, start2, length)
+  local permutation = {}
+  for dim = 1, rank do
+    if dim ~= axis1 and dim ~= axis2 then
+      permutation[#permutation + 1] = dim
+    end
+  end
+  permutation[#permutation + 1] = axis1
+  permutation[#permutation + 1] = axis2
+  local permuted = narrowed:permute(unpack(permutation))
+
+  local batch_count = 1
+  for i = 1, #batch_shape do
+    batch_count = batch_count * batch_shape[i]
+  end
+  if batch_count == 0 then
+    local out_shape = { unpack(batch_shape) }
+    out_shape[#out_shape + 1] = length
+    return zeros_tensor(out_shape, self:dtype_id())
+  end
+
+  local flattened = permuted:reshape(batch_count, length, length)
+  local diagonal = einstein_unary(flattened, "...ii->...i")
+  local out_shape = { unpack(batch_shape) }
+  out_shape[#out_shape + 1] = length
+  return diagonal:reshape(out_shape)
 end
 
 function Tensor:mv(vector)

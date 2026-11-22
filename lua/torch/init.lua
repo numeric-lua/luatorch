@@ -750,6 +750,25 @@ torch.linalg = {
   pinv = function(a, opts) return a:pinv(opts) end,
   matrix_exp = function(a) return a:matrix_exp() end,
   matrix_power = function(a, n) return a:matrix_power(n) end,
+  diagonal = function(a, offset, dim1, dim2)
+    if not Tensor.is_tensor(a) then
+      error("diagonal expects a tensor", 3)
+    end
+    return a:diagonal(offset, dim1 == nil and -2 or dim1,
+      dim2 == nil and -1 or dim2)
+  end,
+  vander = function(x, N)
+    if not Tensor.is_tensor(x) then
+      error("vander expects a tensor", 3)
+    end
+    return x:vander(N, true)
+  end,
+  cross = function(a, b, dim)
+    if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+      error("cross expects two tensors", 3)
+    end
+    return a:cross(b, dim)
+  end,
   vector_norm = function(a, ord, dim, keepdim)
     if not Tensor.is_tensor(a) then
       error("vector_norm expects a tensor", 3)
@@ -819,6 +838,134 @@ torch.linalg = {
     error("matrix_norm supports 'fro', 2, -2, 1, -1, inf, and -inf", 3)
   end,
 }
+
+-- Multiply two or more matrices with an optimal parenthesization. The first
+-- and last operands may be 1-D vectors, matching torch.linalg.multi_dot; all
+-- middle operands must be 2-D. The dynamic program minimizes scalar
+-- multiplications before building the expression, and matmul carries the
+-- autograd graph.
+function torch.linalg.multi_dot(tensors)
+  if type(tensors) ~= "table" then
+    error("multi_dot expects a table of tensors", 3)
+  end
+  local count = #tensors
+  if count < 2 then
+    error("multi_dot expects at least two tensors", 3)
+  end
+  for i = 1, count do
+    if not Tensor.is_tensor(tensors[i]) then
+      error("multi_dot expects tensors; entry " .. i .. " is " ..
+        type(tensors[i]), 3)
+    end
+  end
+  local dtype = tensors[1]:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error("multi_dot supports float16, float32, and float64 tensors", 3)
+  end
+  for i = 2, count do
+    if tensors[i]:dtype() ~= dtype then
+      error("multi_dot expects all tensors to share one dtype", 3)
+    end
+  end
+  for i = 1, count do
+    local rank = tensors[i]:dim()
+    if i == 1 or i == count then
+      if rank ~= 1 and rank ~= 2 then
+        error("multi_dot expects the first and last tensors to be 1-D or 2-D", 3)
+      end
+    elseif rank ~= 2 then
+      error("multi_dot expects middle tensors to be 2-D", 3)
+    end
+  end
+
+  local matrices = {}
+  for i = 1, count do matrices[i] = tensors[i] end
+  local first_vector = matrices[1]:dim() == 1
+  local last_vector = matrices[count]:dim() == 1
+  if first_vector then
+    matrices[1] = matrices[1]:reshape(1, matrices[1]:size(1))
+  end
+  if last_vector then
+    matrices[count] = matrices[count]:reshape(matrices[count]:size(1), 1)
+  end
+  for i = 1, count - 1 do
+    if matrices[i]:size(2) ~= matrices[i + 1]:size(1) then
+      error(string.format(
+        "multi_dot: tensors %d and %d with shapes [%d, %d] and [%d, %d] " ..
+        "cannot be multiplied", i, i + 1,
+        matrices[i]:size(1), matrices[i]:size(2),
+        matrices[i + 1]:size(1), matrices[i + 1]:size(2)), 3)
+    end
+  end
+
+  local dimensions = { matrices[1]:size(1) }
+  for i = 1, count do
+    dimensions[i + 1] = matrices[i]:size(2)
+  end
+  local cost, split = {}, {}
+  for i = 1, count do
+    cost[i], split[i] = {}, {}
+    cost[i][i] = 0
+  end
+  for length = 2, count do
+    for i = 1, count - length + 1 do
+      local j = i + length - 1
+      local best, best_split
+      for k = i, j - 1 do
+        local candidate = cost[i][k] + cost[k + 1][j] +
+          dimensions[i] * dimensions[k + 1] * dimensions[j + 1]
+        if best == nil or candidate < best then
+          best, best_split = candidate, k
+        end
+      end
+      cost[i][j], split[i][j] = best, best_split
+    end
+  end
+
+  local function multiply(i, j)
+    if i == j then return matrices[i] end
+    local k = split[i][j]
+    return multiply(i, k):matmul(multiply(k + 1, j))
+  end
+  local result = multiply(1, count)
+  if first_vector then result = result:squeeze(1) end
+  if last_vector then result = result:squeeze(-1) end
+  return result
+end
+
+function torch.lu_unpack(lu, pivots, opts)
+  if not Tensor.is_tensor(lu) then
+    error("torch.lu_unpack expects a packed LU tensor", 2)
+  end
+  return lu:lu_unpack(pivots, opts)
+end
+
+function torch.diagonal(a, offset, dim1, dim2)
+  if not Tensor.is_tensor(a) then
+    error("torch.diagonal expects a tensor", 2)
+  end
+  return a:diagonal(offset, dim1, dim2)
+end
+
+function torch.vander(x, N, increasing)
+  if not Tensor.is_tensor(x) then
+    error("torch.vander expects a tensor", 2)
+  end
+  if x:dim() ~= 1 then
+    error("torch.vander expects a 1-D tensor", 2)
+  end
+  if increasing ~= nil and type(increasing) ~= "boolean" then
+    error("torch.vander increasing must be a boolean", 2)
+  end
+  return x:vander(N, increasing == true)
+end
+
+function torch.cross(a, b, dim)
+  if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+    error("torch.cross expects two tensors", 2)
+  end
+  return a:cross(b, dim)
+end
 
 function torch.mv(matrix, vector)
   return matrix:mv(vector)
