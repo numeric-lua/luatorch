@@ -606,3 +606,152 @@ test("matrix_power validates its input", function()
     torch.tensor({ { true, false }, { false, true } }):matrix_power(2)
   end, "bool")
 end)
+
+test("lu reconstructs square and rectangular matrices", function()
+  -- A zero leading pivot forces a row interchange.
+  local swapped = float_matrix({ { 0, 1 }, { 1, 0 } })
+  local p, l, u = swapped:lu()
+  assert_dtype(p, "float64")
+  assert_dtype(l, "float64")
+  assert_dtype(u, "float64")
+  assert_tensor(p, { { 0, 1 }, { 1, 0 } })
+  assert_tensor(l, { { 1, 0 }, { 0, 1 } })
+  assert_tensor(u, { { 1, 0 }, { 0, 1 } })
+  assert_tensor(p:matmul(l):matmul(u), swapped:totable(), 1e-12)
+
+  -- No interchange, with nontrivial L and U entries.
+  local square = float_matrix({
+    { 4, 3, 2 },
+    { 1, 5, 7 },
+    { 2, 2, 6 },
+  })
+  local sp, sl, su = torch.linalg.lu(square)
+  assert_tensor(sp, { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } })
+  assert_near(sl:totable(), {
+    { 1, 0, 0 },
+    { 0.25, 1, 0 },
+    { 0.5, 0.11764705882352941, 1 },
+  }, 1e-12)
+  assert_near(su:totable(), {
+    { 4, 3, 2 },
+    { 0, 4.25, 6.5 },
+    { 0, 0, 4.235294117647059 },
+  }, 1e-12)
+  assert_tensor(sp:matmul(sl):matmul(su), square:totable(), 1e-12)
+
+  -- Rectangular inputs return P (m x m), L (m x min(m, n)), U (min(m, n) x n).
+  local wide = float_matrix({
+    { 1, 2, 3 },
+    { 4, 5, 6 },
+  })
+  local wp, wl, wu = wide:lu()
+  assert_shape(wp, { 2, 2 })
+  assert_shape(wl, { 2, 2 })
+  assert_shape(wu, { 2, 3 })
+  assert_tensor(wp, { { 0, 1 }, { 1, 0 } })
+  assert_near(wl:totable(), { { 1, 0 }, { 0.25, 1 } }, 1e-12)
+  assert_near(wu:totable(), { { 4, 5, 6 }, { 0, 0.75, 1.5 } }, 1e-12)
+  assert_tensor(wp:matmul(wl):matmul(wu), wide:totable(), 1e-12)
+
+  local tall = float_matrix({
+    { 1, 2 },
+    { 3, 4 },
+    { 5, 6 },
+  })
+  local tp, tl, tu = tall:lu()
+  assert_shape(tp, { 3, 3 })
+  assert_shape(tl, { 3, 2 })
+  assert_shape(tu, { 2, 2 })
+  assert_tensor(tp:matmul(tl):matmul(tu), tall:totable(), 1e-12)
+  for i = 1, 2 do
+    assert_near(tl:get(i, i), 1, 1e-12, "L diagonal must be one")
+  end
+  for i = 1, 3 do
+    for j = i + 1, 2 do
+      assert_near(tl:get(i, j), 0, 1e-12, "L must be lower triangular")
+    end
+  end
+  for i = 2, 2 do
+    for j = 1, i - 1 do
+      assert_near(tu:get(i, j), 0, 1e-12, "U must be upper triangular")
+    end
+  end
+end)
+
+test("lu handles batches and empty matrices", function()
+  local batch = torch.tensor({
+    { { 1, 2, 3 }, { 4, 5, 6 } },
+    { { 0, 1, 2 }, { 3, 4, 5 } },
+  }, { dtype = torch.float64 })
+  local p, l, u = batch:lu()
+  assert_shape(p, { 2, 2, 2 })
+  assert_shape(l, { 2, 2, 2 })
+  assert_shape(u, { 2, 2, 3 })
+  assert_tensor(p:bmm(l):bmm(u), batch:totable(), 1e-12)
+  assert_tensor(p:select(1, 1), { { 0, 1 }, { 1, 0 } })
+  assert_tensor(p:select(1, 2), { { 0, 1 }, { 1, 0 } })
+
+  local empty_p, empty_l, empty_u =
+    torch.zeros(0, 0, { dtype = torch.float64 }):lu()
+  assert_shape(empty_p, { 0, 0 })
+  assert_shape(empty_l, { 0, 0 })
+  assert_shape(empty_u, { 0, 0 })
+end)
+
+test("lu gradients flow through L and U", function()
+  local values = { { 4, 1 }, { 2, 3 } }
+  local a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local p, l, u = a:lu()
+  assert_true(not p:requires_grad(), "P is a permutation matrix")
+  assert_true(l:requires_grad())
+  assert_true(u:requires_grad())
+
+  local weight_l = float_matrix({ { 1, 2 }, { 3, 5 } })
+  local weight_u = float_matrix({ { -1, 0.5 }, { 2, 4 } })
+  local loss = (l * weight_l):sum() + (u * weight_u):sum()
+  loss:backward()
+
+  -- The pivots do not move for these small perturbations, so a central
+  -- difference checks the ATen LU backward for both factors.
+  local eps = 1e-6
+  local function perturbed(i, j, delta)
+    local copy = torch.tensor(values, { dtype = torch.float64 })
+    copy:set(i, j, values[i][j] + delta)
+    local _, pl, pu = copy:lu()
+    return ((pl * weight_l):sum() + (pu * weight_u):sum()):item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      local numeric = (perturbed(i, j, eps) - perturbed(i, j, -eps)) /
+        (2 * eps)
+      assert_near(a:grad():get(i, j), numeric, 1e-5,
+        string.format("d loss / d A[%d][%d]", i, j))
+    end
+  end
+end)
+
+test("lu validates dimensions and dtypes", function()
+  assert_error(function()
+    torch.ones(3):lu()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.tensor(1.0):lu()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):lu()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):lu()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.tensor({ { true, false }, { false, true } }):lu()
+  end, "float32 and float64")
+
+  local p, l, u = torch.ones(2, 3):lu()
+  assert_dtype(p, "float32")
+  assert_dtype(l, "float32")
+  assert_dtype(u, "float32")
+end)
