@@ -102,6 +102,22 @@ bench("svd 128x128 float32", 5, function()
   local u, s, vh = square:svd(false)
 end)
 
+bench("pinv 128x128 float32", 5, function()
+  local inverse = square:pinv()
+end)
+
+local pinv_tall = torch.randn(256, 128)
+bench("pinv 256x128 float32", 5, function()
+  local inverse = pinv_tall:pinv()
+end, "tall")
+
+local pinv_grad = torch.randn(64, 64, { requires_grad = true })
+bench("pinv fwd+bwd 64x64 float32", 10, function()
+  local inverse = pinv_grad:pinv()
+  inverse:sum():backward()
+  pinv_grad:zero_grad()
+end, "includes zero_grad")
+
 -- recent ops: einsum, float16, predicates, slogdet -----------------------
 local einsum_a = torch.randn(128, 128)
 local einsum_b = torch.randn(128, 128)
