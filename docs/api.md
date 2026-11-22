@@ -330,6 +330,7 @@ a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
 a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
+a:matrix_exp()         -- matrix exponential of square/batched matrices
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
@@ -339,6 +340,7 @@ torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
 torch.linalg.pinv(a, opts?)
+torch.linalg.matrix_exp(a)
 ```
 
 `slogdet` computes the signed log-determinant without forming the determinant,
@@ -427,6 +429,22 @@ integer, and bool inputs are rejected with Lua errors. `atol` and `rtol` must
 be non-negative numbers. The pseudoinverse is differentiable with respect to
 the input, but its derivative diverges at repeated singular values, so
 gradients near a rank change can be ill-conditioned.
+
+`matrix_exp` computes the matrix exponential through ATen's scaling-and-squaring
+implementation. Unlike an elementwise `exp`, it solves the matrix ODE and
+satisfies `exp(A) exp(-A) = I` and `det(exp(A)) = exp(tr A)`. An input of
+shape `(*, n, n)` returns the same shape, including empty matrices, and the
+result is differentiable with respect to the input:
+
+```lua
+local a = torch.tensor({{0, 1}, {0, 0}}, {dtype = torch.float64})
+print(a:matrix_exp():totable())          -- {{1, 1}, {0, 1}}
+```
+
+Only real float32/float64 inputs are accepted. float16, integer, and bool
+inputs are rejected with Lua errors: ATen's CPU half kernel is not numerically
+reliable for this operation (small inputs can return NaN or large negative
+values), so luatorch does not expose it.
 
 `lstsq` minimizes `||A x - b||` and returns four values: `solution`,
 `residuals`, `rank`, and `singular_values`. For a matrix `A` of shape
@@ -777,6 +795,7 @@ torch.linalg.vector_norm(a, ord?, dim?, keepdim?)
 torch.linalg.slogdet(a)          -- returns sign, logabsdet
 torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values
 torch.linalg.pinv(a, opts?)      -- Moore-Penrose pseudoinverse
+torch.linalg.matrix_exp(a)       -- matrix exponential
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)

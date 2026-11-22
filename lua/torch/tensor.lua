@@ -1401,8 +1401,9 @@ end
 -- Matrix exponential through ATen's `linalg_matrix_exp` (scaling and
 -- squaring). The input is a square matrix or a batch of square matrices;
 -- the output has the same shape and dtype. Only real float32/float64 are
--- exposed: ATen accepts float16, but its half-precision accumulation
--- overflows for modest norms, so half is rejected instead of returning inf.
+-- exposed: ATen accepts float16, but its CPU half kernel is not numerically
+-- reliable (small inputs can return NaN or large negative values), so half
+-- is rejected instead of returning garbage.
 function Tensor:matrix_exp()
   if self:dim() < 2 then
     error("matrix_exp expects a matrix or a batch of matrices", 3)

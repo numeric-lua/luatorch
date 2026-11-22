@@ -148,6 +148,12 @@ ATen is 0-based; the Lua API is 1-based. Conversions live exclusively in
   real-valued path. The Lua layer validates rank, float32/float64 dtype, and
   non-negative `atol`/`rtol` before dispatch, and documents that gradients
   are ill-conditioned at repeated singular values.
+- `matrix_exp` delegates to ATen's `linalg_matrix_exp` for square or batched
+  square matrices. The Lua layer rejects sub-2-D, non-square, and
+  non-float32/float64 inputs before dispatch; in particular it rejects
+  float16, whose CPU kernel is not numerically reliable (small inputs can
+  return NaN or large negative values) even though dispatch accepts it. The
+  output keeps the input shape and stays differentiable through ATen.
 - `multinomial` samples 1-based categories for the same reason as `argmax`;
   uniform/normal/exponential/bernoulli updates are in-place and run through
   ATen's RNG.

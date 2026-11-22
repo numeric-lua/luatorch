@@ -3,6 +3,31 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.26.0] — 2026-11-22
+
+### Added
+
+- `torch.linalg.matrix_exp` / `Tensor:matrix_exp()` backed by
+  `at::linalg_matrix_exp`, computing the matrix exponential with scaling and
+  squaring for square, batched, and empty matrices; the result keeps the input
+  shape and dtype;
+- Lua validation rejects sub-2-D, non-square, float16, integer, and bool
+  inputs with clear messages; only real float32/float64 are exposed because
+  ATen's CPU half kernel is not numerically reliable (small inputs can return
+  NaN or large negative values);
+- five tests covering nilpotent, diagonal, scalar, and rotation generators,
+  the identities `exp(A) exp(-A) = I` and `det(exp(A)) = exp(tr A)`,
+  non-contiguous inputs, batches and empty matrices, central-difference
+  gradients, the exact gradient at zero, and shape/dtype errors;
+- benchmark entries for a 128x128 forward pass, an 8x32x32 batch, and a 64x64
+  forward+backward pass.
+
+### Changed
+
+- docs describe the matrix exponential, square/batch/empty shapes, real-dtype
+  limits, and autograd; the API documentation test guards the new alias; the
+  roadmap records the exponential.
+
 ## [0.25.0] — 2026-11-22
 
 ### Added
