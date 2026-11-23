@@ -1306,6 +1306,45 @@ function Tensor:inverse()
   return wrap(lib.lt_linalg_inv(self.h))
 end
 
+local inv_ex_options = {
+  check_errors = true,
+}
+
+-- Error-returning inverse. Returns the inverse and an int32 info tensor:
+-- zero entries mark successful inversions and positive entries identify a
+-- singular batch element. check_errors=true raises instead, matching
+-- torch.linalg.inv_ex.
+function Tensor:inv_ex(opts)
+  if self:dim() < 2 then
+    error("inv_ex expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("inv_ex expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("inv_ex supports float32 and float64 tensors", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("inv_ex options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not inv_ex_options[name] then
+      error("inv_ex got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  if opts.check_errors ~= nil and type(opts.check_errors) ~= "boolean" then
+    error("inv_ex check_errors must be a boolean", 3)
+  end
+  local inverse_pointer = ffi.new("lt_tensor*[1]")
+  local info_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_inv_ex(self.h, opts.check_errors and 1 or 0,
+    inverse_pointer, info_pointer))
+  return wrap(inverse_pointer[0]), wrap(info_pointer[0])
+end
+
 -- Multiplicative inverse of tensordot. The first `ind` dimensions are grouped
 -- into m rows and the remaining dimensions into n columns; the reshaped matrix
 -- must be square. The inverse is reshaped to trailing dimensions first and

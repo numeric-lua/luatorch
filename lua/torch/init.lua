@@ -732,6 +732,12 @@ end
 
 torch.linalg = {
   inv = function(a) return a:inverse() end,
+  inv_ex = function(a, opts)
+    if not Tensor.is_tensor(a) then
+      error("inv_ex expects a tensor", 3)
+    end
+    return a:inv_ex(opts)
+  end,
   tensorinv = function(a, ind) return a:tensorinv(ind) end,
   tensorsolve = function(a, b, dims) return a:tensorsolve(b, dims) end,
   det = function(a) return a:det() end,

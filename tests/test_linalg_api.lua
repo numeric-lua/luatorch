@@ -837,3 +837,107 @@ test("cholesky_ex validates options, shapes, and dtypes", function()
     torch.ones(2, 2, { dtype = torch.bool }):cholesky_ex()
   end, "float32 and float64")
 end)
+
+test("inv_ex inverts matrices and returns info", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local inverse, info = torch.linalg.inv_ex(matrix)
+  assert_shape(inverse, { 2, 2 })
+  assert_dtype(inverse, "float64")
+  assert_dtype(info, "int32")
+  assert_eq(info:item(), 0)
+  assert_tensor(matrix:matmul(inverse),
+    torch.eye(2, { dtype = torch.float64 }):totable(), 1e-12)
+  assert_tensor(inverse, matrix:inverse():totable(), 1e-12)
+
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 2, 0 }, { 0, 5 } },
+  }, { dtype = torch.float64 })
+  local batch_inverse, batch_info = batch:inv_ex()
+  assert_shape(batch_inverse, { 2, 2, 2 })
+  assert_shape(batch_info, { 2 })
+  assert_eq(batch_info:get(1), 0)
+  assert_eq(batch_info:get(2), 0)
+  for i = 1, 2 do
+    assert_tensor(batch:select(1, i):matmul(batch_inverse:select(1, i)),
+      torch.eye(2, { dtype = torch.float64 }):totable(), 1e-12)
+  end
+
+  assert_dtype(torch.linalg.inv_ex(matrix:float()), "float32")
+  local empty, empty_info = torch.zeros(0, 0, {
+    dtype = torch.float64,
+  }):inv_ex()
+  assert_shape(empty, { 0, 0 })
+  assert_eq(empty_info:item(), 0)
+end)
+
+test("inv_ex reports singular matrices", function()
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 1, 2 }, { 2, 4 } },
+  }, { dtype = torch.float64 })
+  local _, info = torch.linalg.inv_ex(batch)
+  assert_shape(info, { 2 })
+  assert_eq(info:get(1), 0)
+  assert_true(info:get(2) > 0, "second matrix should be singular")
+
+  local singular = float_matrix({ { 1, 2 }, { 2, 4 } })
+  local _, singular_info = singular:inv_ex()
+  assert_true(singular_info:item() > 0)
+  assert_error(function()
+    singular:inv_ex({ check_errors = true })
+  end, "singular")
+end)
+
+test("inv_ex differentiates through the inverse", function()
+  local values = { { 4.0, 1.0 }, { 1.0, 3.0 } }
+  local matrix = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local inverse = matrix:inv_ex()
+  local loss = inverse:sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(i, j, delta)
+    local copy = { { values[1][1], values[1][2] },
+      { values[2][1], values[2][2] } }
+    copy[i][j] = copy[i][j] + delta
+    return torch.tensor(copy, { dtype = torch.float64 }):inverse():sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      assert_near(matrix:grad():get(i, j),
+        (numeric(i, j, eps) - numeric(i, j, -eps)) / (2 * eps), 1e-5)
+    end
+  end
+end)
+
+test("inv_ex validates options, shapes, and dtypes", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  assert_error(function()
+    matrix:inv_ex({ check_errors = 1 })
+  end, "must be a boolean")
+  assert_error(function()
+    matrix:inv_ex({ upper = true })
+  end, "unknown option")
+  assert_error(function()
+    matrix:inv_ex("yes")
+  end, "options must be a table")
+  assert_error(function()
+    torch.ones(3):inv_ex()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):inv_ex()
+  end, "square")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):inv_ex()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):inv_ex()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):inv_ex()
+  end, "float32 and float64")
+end)

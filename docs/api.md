@@ -318,6 +318,7 @@ a:baddbmm(m1, m2, beta?, alpha?)  -- batched addmm
 
 ```lua
 a:inverse()
+a:inv_ex(opts?)        -- inverse plus int32 info; opts.check_errors
 a:tensorinv(ind?)   -- inverse of tensordot over the first ind dimensions
 a:tensorsolve(b, dims?)  -- solve tensordot(a, x, x:dim()) = b
 a:det()
@@ -345,7 +346,8 @@ a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
 a:cross(other, dim?)               -- 3-vector cross product along one dimension
 a:vecdot(other, dim?)              -- batched vector dot along one dimension
 
-torch.linalg.inv(a)      torch.linalg.tensorinv(a, ind?)
+torch.linalg.inv(a)      torch.linalg.inv_ex(a, opts?)
+torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
@@ -415,6 +417,21 @@ local a = torch.tensor({{9}, {3}, {4}}, {dtype = torch.float64})
 local tau = torch.tensor({2 / 26}, {dtype = torch.float64})
 print(torch.linalg.householder_product(a, tau):totable())
 -- {{0.9230769230769231}, {-0.2307692307692308}, {-0.3076923076923077}}
+```
+
+`inv_ex` is the error-returning form of `inverse`. It returns the inverse
+and an int32 `info` tensor whose entries are zero on success or positive when
+the corresponding batch element is singular. Inputs may be batched square
+matrices, `info` has the batch shape, and the inverse is still returned when
+`info` is positive, matching PyTorch. Pass `{ check_errors = true }` to raise
+on a singular matrix instead. Only float32/float64 are accepted; the inverse
+is differentiable and the integer `info` stays detached:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local inverse, info = torch.linalg.inv_ex(a)
+print(info:item())                    -- 0
+print(a:matmul(inverse):allclose(torch.eye(2, {dtype = torch.float64})))
 ```
 
 `cholesky_ex` is the error-returning form of `cholesky`. It returns the

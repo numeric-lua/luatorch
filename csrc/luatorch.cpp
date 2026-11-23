@@ -2069,6 +2069,21 @@ lt_tensor* lt_linalg_inv(lt_tensor* a) {
   LT_CATCH_NULL
 }
 
+int lt_linalg_inv_ex(lt_tensor* a, int check_errors,
+                     lt_tensor** inverse, lt_tensor** info) {
+  try {
+    clear_error();
+    if (inverse == nullptr || info == nullptr) {
+      throw std::runtime_error("inv_ex: null output pointer");
+    }
+    auto result = at::linalg_inv_ex(a->t, check_errors != 0);
+    *inverse = wrap(std::get<0>(result));
+    *info = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 lt_tensor* lt_linalg_det(lt_tensor* a) {
   try {
     clear_error();

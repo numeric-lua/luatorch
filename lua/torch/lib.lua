@@ -143,6 +143,8 @@ lt_tensor* lt_fused_softmax(lt_tensor* a);
 lt_tensor* lt_log_softmax(lt_tensor* a, int64_t dim);
 lt_tensor* lt_fused_log_softmax(lt_tensor* a);
 lt_tensor* lt_linalg_inv(lt_tensor* a);
+int lt_linalg_inv_ex(lt_tensor* a, int check_errors,
+                     lt_tensor** inverse, lt_tensor** info);
 lt_tensor* lt_linalg_det(lt_tensor* a);
 int lt_linalg_slogdet(lt_tensor* a, lt_tensor** sign, lt_tensor** logabsdet);
 int lt_linalg_lstsq(lt_tensor* a, lt_tensor* b, const char* driver,
