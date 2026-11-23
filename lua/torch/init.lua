@@ -741,6 +741,7 @@ torch.linalg = {
   lstsq = function(a, b, opts) return a:lstsq(b, opts) end,
   cholesky = function(a, upper) return a:cholesky(upper) end,
   svd = function(a, full_matrices) return a:svd(full_matrices) end,
+  svdvals = function(a) return a:svdvals() end,
   qr = function(a, mode) return a:qr(mode) end,
   lu = function(a) return a:lu() end,
   lu_factor = function(a) return a:lu_factor() end,

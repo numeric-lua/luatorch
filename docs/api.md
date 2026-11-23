@@ -325,6 +325,7 @@ a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:svd(full_matrices?)  -- returns U, S, Vh
+a:svdvals()            -- descending singular values, shape (*, min(m, n))
 a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
 a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
@@ -339,6 +340,7 @@ a:cross(other, dim?)               -- 3-vector cross product along one dimension
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.svdvals(a)  -- descending singular values
 torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
@@ -353,6 +355,18 @@ torch.linalg.cross(a, b, dim?)            -- last dimension by default
 torch.linalg.multi_dot({a, b, c, ...})    -- optimal chain product
 torch.linalg.pinv(a, opts?)
 torch.linalg.matrix_exp(a)
+```
+
+`svdvals` returns only the singular values of a matrix or a batch of
+matrices, in descending order, with shape `(*, min(m, n))`. It is equivalent
+to the `S` returned by `svd(false)` but avoids materializing `U` and `Vh`.
+CPU LAPACK only provides the real float32/float64 path, so float16, integer,
+and bool inputs are rejected; singular values are differentiable with respect
+to the input:
+
+```lua
+local a = torch.tensor({{1, 2}, {3, 4}, {5, 6}}, {dtype = torch.float64})
+print(torch.linalg.svdvals(a):sizes())  -- {2}
 ```
 
 `slogdet` computes the signed log-determinant without forming the determinant,

@@ -1446,6 +1446,21 @@ function Tensor:svd(full_matrices)
   return wrap(u_pointer[0]), wrap(s_pointer[0]), wrap(vh_pointer[0])
 end
 
+-- Singular values only. This follows the same CPU LAPACK path as svd with
+-- full_matrices=false, returns the descending values in a tensor of shape
+-- (*, min(m, n)), and preserves autograd through the singular values.
+function Tensor:svdvals()
+  if self:dim() < 2 then
+    error("svdvals expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("svdvals supports float32 and float64 tensors", 3)
+  end
+  local _, singular_values = self:svd(false)
+  return singular_values
+end
+
 function Tensor:qr(mode)
   mode = mode or "reduced"
   local q_pointer = ffi.new("lt_tensor*[1]")
