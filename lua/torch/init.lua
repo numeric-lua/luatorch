@@ -883,6 +883,12 @@ torch.linalg = {
   det = function(a) return a:det() end,
   slogdet = function(a) return a:slogdet() end,
   solve = function(a, b) return a:solve(b) end,
+  solve_ex = function(a, b, opts)
+    if not Tensor.is_tensor(a) then
+      error("solve_ex expects a tensor", 3)
+    end
+    return a:solve_ex(b, opts)
+  end,
   solve_triangular = function(a, b, opts)
     return a:solve_triangular(b, opts)
   end,

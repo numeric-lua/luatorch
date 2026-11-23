@@ -59,7 +59,7 @@ end)
 test("documented linalg aliases exist", function()
   local api = read("docs/api.md")
   for _, name in ipairs({ "inv", "inv_ex", "tensorinv", "tensorsolve", "det",
-      "slogdet", "solve",
+      "slogdet", "solve", "solve_ex",
       "solve_triangular", "lstsq", "cholesky", "cholesky_ex", "eigh", "eigvalsh",
       "svd", "qr",
       "householder_product", "lu", "lu_factor", "lu_factor_ex", "lu_solve", "pinv",

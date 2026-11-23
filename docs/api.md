@@ -324,6 +324,7 @@ a:tensorsolve(b, dims?)  -- solve tensordot(a, x, x:dim()) = b
 a:det()
 a:slogdet()         -- returns sign, logabsdet; batched and differentiable
 a:solve(b)          -- solve a x = b (b may be a vector or matrix)
+a:solve_ex(b, opts?) -- solve plus int32 info; opts.left/check_errors
 a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
@@ -352,6 +353,7 @@ torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.solve_ex(a, b, opts?)  -- solution plus int32 info
 torch.linalg.cholesky_ex(a, opts?)
 torch.linalg.eigh(a, uplo?)  torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.svdvals(a)  -- descending singular values
@@ -489,6 +491,23 @@ so it stays finite for very large or small magnitudes. `sign` is `-1`, `0`, or
 `1`; `logabsdet` is real. For a square matrix `exp(logabsdet) * sign == det`,
 and gradients flow through `logabsdet` as `A^{-T}`. Batched inputs return
 `sign` and `logabsdet` with the batch dimensions; square matrices are required.
+
+`solve_ex` is the error-reporting form of `solve`. It returns the solution and
+an int32 `info` tensor whose entries are zero on success or positive when the
+corresponding batch element is singular. `left` defaults to true (`A X = B`)
+and false solves `X A = B`; `check_errors` defaults to false, so a singular
+system is solved and reported through `info` instead of raising. A 1-D
+right-hand side is accepted for a left solve; otherwise `B` has shape
+`(*, n, k)` for a left solve and `(*, k, n)` for a right solve. Batch
+dimensions broadcast, both operands must share float32/float64 dtype, and the
+solution is differentiable:
+
+```lua
+local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
+local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
+local x, info = torch.linalg.solve_ex(a, b)
+print(info:item(), x:totable())       -- 0, {{2.5}, {-3}}
+```
 
 `solve_triangular` solves `A X = B` when `left` is true (the default) and
 `X A = B` when it is false, assuming `A` is triangular. It requires an options

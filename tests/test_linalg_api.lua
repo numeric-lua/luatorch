@@ -1246,3 +1246,142 @@ test("lu_factor_ex reports singular matrices and validates inputs", function()
     })
   end, "check_errors must be a boolean")
 end)
+
+test("solve_ex solves dense systems and returns info", function()
+  local a = float_matrix({ { 4, 3 }, { 2, 1 } })
+  local b = float_matrix({ { 1 }, { 2 } })
+  local solution, info = a:solve_ex(b)
+  assert_tensor(solution, a:solve(b):totable(), 1e-12)
+  assert_dtype(solution, "float64")
+  assert_dtype(info, "int32")
+  assert_shape(info, {})
+  assert_eq(info:item(), 0)
+
+  local alias_solution, alias_info = torch.linalg.solve_ex(a, b)
+  assert_tensor(alias_solution, solution:totable(), 1e-12)
+  assert_eq(alias_info:item(), 0)
+
+  -- 1-D right-hand sides are supported for a left solve.
+  local vector = torch.tensor({ 1, 2 }, { dtype = torch.float64 })
+  local vector_solution, vector_info = a:solve_ex(vector)
+  assert_shape(vector_solution, { 2 })
+  assert_tensor(vector_solution, a:solve(vector):totable(), 1e-12)
+  assert_eq(vector_info:item(), 0)
+
+  -- left=false solves X A = B with a matrix right-hand side.
+  local right = float_matrix({ { 1, 2 }, { 3, 4 } })
+  local right_solution, right_info = a:solve_ex(right, { left = false })
+  assert_tensor(right_solution, right:matmul(a:inverse()):totable(), 1e-12)
+  assert_eq(right_info:item(), 0)
+
+  local batch = torch.tensor({
+    { { 4, 1 }, { 2, 3 } },
+    { { 3, 1 }, { 1, 2 } },
+  }, { dtype = torch.float64 })
+  local rhs = torch.tensor({
+    { { 1 }, { 2 } },
+    { { 2 }, { 1 } },
+  }, { dtype = torch.float64 })
+  local batch_solution, batch_info = batch:solve_ex(rhs)
+  assert_shape(batch_solution, { 2, 2, 1 })
+  assert_shape(batch_info, { 2 })
+  assert_tensor(batch_solution, batch:solve(rhs):totable(), 1e-12)
+  assert_tensor(batch_info, { 0, 0 }, 0)
+
+  -- A right-hand side without batch dimensions broadcasts over the batch.
+  local shared, shared_info = batch:solve_ex(b)
+  assert_tensor(shared, batch:solve(b):totable(), 1e-12)
+  assert_tensor(shared_info, { 0, 0 }, 0)
+end)
+
+test("solve_ex gradients match the ordinary solve", function()
+  local values = { { 4, 1 }, { 2, 3 } }
+  local rhs_values = { { 1, 2 }, { 3, 4 } }
+  local weight = float_matrix({ { 1, 2 }, { 3, 5 } })
+
+  local a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local b = torch.tensor(rhs_values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local solution, info = a:solve_ex(b)
+  assert_true(solution:requires_grad(), "solution carries gradients")
+  assert_true(not info:requires_grad(), "info stays detached")
+  local loss = (solution * weight):sum()
+  loss:backward()
+
+  local reference_a = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local reference_b = torch.tensor(rhs_values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local reference_loss = (reference_a:solve(reference_b) * weight):sum()
+  reference_loss:backward()
+  assert_near(a:grad():totable(), reference_a:grad():totable(), 1e-10)
+  assert_near(b:grad():totable(), reference_b:grad():totable(), 1e-10)
+end)
+
+test("solve_ex reports singular matrices and validates inputs", function()
+  local singular = float_matrix({ { 1, 2 }, { 2, 4 } })
+  local rhs = float_matrix({ { 1 }, { 2 } })
+  local solution, info = singular:solve_ex(rhs)
+  assert_shape(solution, { 2, 1 })
+  assert_dtype(info, "int32")
+  assert_eq(info:item(), 2)
+  assert_error(function()
+    singular:solve_ex(rhs, { check_errors = true })
+  end, "singular")
+
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex({ 1, 2 })
+  end, "tensor right-hand side")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):solve_ex(rhs)
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, { dtype = torch.float64 }):solve_ex(rhs)
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):solve_ex(rhs)
+  end, "float32 and float64")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(
+      torch.ones(2, 1, { dtype = torch.float32 }))
+  end, "match the matrix dtype")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(
+      torch.ones(3, { dtype = torch.float64 }))
+  end, "wrong length")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(
+      torch.ones(3, 1, { dtype = torch.float64 }))
+  end, "wrong number of rows")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(
+      torch.ones(2, { dtype = torch.float64 }), { left = false })
+  end, "at least 2 dimensions")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(
+      torch.ones(1, 3, { dtype = torch.float64 }), { left = false })
+  end, "wrong number of columns")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(rhs, "options")
+  end, "options must be a table")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(rhs, { transpose = true })
+  end, "unknown option")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(rhs, { left = 1 })
+  end, "left must be a boolean")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):solve_ex(rhs, {
+      check_errors = "yes",
+    })
+  end, "check_errors must be a boolean")
+end)

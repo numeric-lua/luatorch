@@ -205,6 +205,8 @@ int lt_linalg_lstsq(lt_tensor* a, lt_tensor* b, const char* driver,
                     lt_tensor** solution, lt_tensor** residuals,
                     lt_tensor** rank, lt_tensor** singular_values);
 lt_tensor* lt_linalg_solve(lt_tensor* a, lt_tensor* b);
+int lt_linalg_solve_ex(lt_tensor* a, lt_tensor* b, int left, int check_errors,
+                       lt_tensor** result, lt_tensor** info);
 lt_tensor* lt_linalg_solve_triangular(lt_tensor* a, lt_tensor* b,
                                       int upper, int left,
                                       int unitriangular);

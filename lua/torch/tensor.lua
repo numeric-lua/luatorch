@@ -1468,6 +1468,76 @@ function Tensor:solve(other)
   return wrap(lib.lt_linalg_solve(self.h, other.h))
 end
 
+local solve_ex_options = {
+  left = true,
+  check_errors = true,
+}
+
+-- Error-reporting dense solve. Returns the solution and an int32 `info`
+-- tensor whose entries are zero on success or positive when the corresponding
+-- batch element is singular. `left` defaults to true (A X = B); false solves
+-- X A = B. `check_errors` defaults to false, matching
+-- torch.linalg.solve_ex. Vector and matrix right-hand sides are accepted with
+-- broadcast batch dimensions, and the solution is differentiable.
+function Tensor:solve_ex(other, opts)
+  if not is_tensor(other) then
+    error("solve_ex expects a tensor right-hand side", 3)
+  end
+  if self:dim() < 2 or self:size(-2) ~= self:size(-1) then
+    error("solve_ex expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("solve_ex supports float32 and float64 tensors", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("solve_ex expects the right-hand side to match the matrix dtype", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("solve_ex options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not solve_ex_options[name] then
+      error("solve_ex got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  for _, name in ipairs({ "left", "check_errors" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("solve_ex " .. name .. " must be a boolean", 3)
+    end
+  end
+  local left = opts.left ~= false
+  local n = self:size(-1)
+  if left then
+    if other:dim() == 1 then
+      if other:size(1) ~= n then
+        error("solve_ex right-hand side has the wrong length", 3)
+      end
+    elseif other:dim() >= 2 then
+      if other:size(-2) ~= n then
+        error("solve_ex right-hand side has the wrong number of rows", 3)
+      end
+    else
+      error("solve_ex expects a vector or matrix right-hand side", 3)
+    end
+  else
+    if other:dim() < 2 then
+      error("solve_ex expects a right-hand side with at least 2 dimensions " ..
+        "when left is false", 3)
+    end
+    if other:size(-1) ~= n then
+      error("solve_ex right-hand side has the wrong number of columns", 3)
+    end
+  end
+  local result_pointer = ffi.new("lt_tensor*[1]")
+  local info_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_solve_ex(self.h, other.h, left and 1 or 0,
+    opts.check_errors == true and 1 or 0, result_pointer, info_pointer))
+  return wrap(result_pointer[0]), wrap(info_pointer[0])
+end
+
 local solve_triangular_options = {
   upper = true,
   left = true,

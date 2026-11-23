@@ -2142,6 +2142,22 @@ lt_tensor* lt_linalg_solve(lt_tensor* a, lt_tensor* b) {
   LT_CATCH_NULL
 }
 
+int lt_linalg_solve_ex(lt_tensor* a, lt_tensor* b, int left, int check_errors,
+                       lt_tensor** result, lt_tensor** info) {
+  try {
+    clear_error();
+    if (result == nullptr || info == nullptr) {
+      throw std::runtime_error("solve_ex: null output pointer");
+    }
+    auto outputs = at::linalg_solve_ex(
+        a->t, b->t, left != 0, check_errors != 0);
+    *result = wrap(std::get<0>(outputs));
+    *info = wrap(std::get<1>(outputs));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 lt_tensor* lt_linalg_solve_triangular(lt_tensor* a, lt_tensor* b,
                                       int upper, int left,
                                       int unitriangular) {
