@@ -2306,6 +2306,31 @@ lt_tensor* lt_linalg_lu_solve(lt_tensor* LU, lt_tensor* pivots,
   LT_CATCH_NULL
 }
 
+int lt_linalg_ldl_factor(lt_tensor* a, int hermitian,
+                         lt_tensor** LD, lt_tensor** pivots) {
+  try {
+    clear_error();
+    if (LD == nullptr || pivots == nullptr) {
+      throw std::runtime_error("ldl_factor: null output pointer");
+    }
+    // libtorch 2.5 maps the sytrf positive-info code to an internal assertion
+    // in linalg_ldl_factor, so factor without its error check and raise a
+    // stable message ourselves when any batch element is singular.
+    auto result = at::linalg_ldl_factor_ex(
+        a->t, hermitian != 0, /*check_errors=*/false);
+    const at::Tensor& info = std::get<2>(result);
+    if (info.numel() > 0 && info.ne(0).any().item<bool>()) {
+      throw std::runtime_error(
+          "ldl_factor: the matrix is singular; use ldl_factor_ex to "
+          "inspect info");
+    }
+    *LD = wrap(std::get<0>(result));
+    *pivots = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
                           int has_atol, int has_rtol) {
   try {

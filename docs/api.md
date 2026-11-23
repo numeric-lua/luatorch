@@ -340,6 +340,7 @@ a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
 a:lu_factor_ex(opts?)  -- packed LU, pivots, plus int32 info; opts.pivot/check_errors
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
 a:lu_unpack(pivots, opts?)    -- unpack packed LU into P, L, U
+a:ldl_factor(opts?)    -- compact LDL^T factor and 1-based block pivots
 a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
 a:matrix_exp()         -- matrix exponential of square/batched matrices
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
@@ -363,6 +364,7 @@ torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
 torch.linalg.lu_factor_ex(a, opts?)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
+torch.linalg.ldl_factor(a, opts?)  -- compact LDL^T factor
 torch.lu_unpack(lu, pivots, opts?)
 torch.diagonal(a, offset?, dim1?, dim2?)
 torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
@@ -600,6 +602,23 @@ local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
 local lu, pivots = a:lu_factor()
 local p, l, u = torch.lu_unpack(lu, pivots)
 print(p:matmul(l):matmul(u):totable())   -- {{4, 3}, {2, 1}}
+```
+
+`ldl_factor` computes a compact LDL^T factorization of a real symmetric matrix
+or a batch of symmetric matrices. It returns `LD`, which has the same shape as
+`A`, and int32 1-based `pivots` with shape `(*, n)`. Following LAPACK's
+`sytrf`, the strict lower triangle of `LD` stores the unit lower-triangular
+multipliers and the diagonal stores the 1x1 and 2x2 diagonal blocks of `D`.
+For a factorization with only 1x1 pivots, `LD` encodes `A = L D L^T`. A
+singular matrix raises; use `ldl_factor_ex` to report failure through `info`
+instead. The CPU path accepts float32/float64 only, supports batches and empty
+matrices, and has no implemented derivative for the factorization:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local ld, pivots = torch.linalg.ldl_factor(a)
+print(ld:totable())     -- {{4, 0}, {0.5, 2}}
+print(pivots:totable()) -- {1, 2}
 ```
 
 `pinv` computes the Moore-Penrose pseudoinverse through ATen's SVD-based

@@ -227,6 +227,8 @@ int lt_linalg_lu_factor_ex(lt_tensor* a, int pivot, int check_errors,
                            lt_tensor** info);
 lt_tensor* lt_linalg_lu_solve(lt_tensor* LU, lt_tensor* pivots,
                               lt_tensor* b, int left, int adjoint);
+int lt_linalg_ldl_factor(lt_tensor* a, int hermitian,
+                         lt_tensor** LD, lt_tensor** pivots);
 lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
                           int has_atol, int has_rtol);
 lt_tensor* lt_linalg_matrix_exp(lt_tensor* a);

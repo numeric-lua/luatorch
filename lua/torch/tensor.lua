@@ -1974,6 +1974,48 @@ function Tensor:lu_solve(pivots, other, opts)
     left and 1 or 0, adjoint and 1 or 0))
 end
 
+local ldl_factor_options = {
+  hermitian = true,
+}
+
+-- Compact LDL^T factorization of a real symmetric matrix or batch of
+-- matrices. Returns `LD` with the same shape as the input and int32 1-based
+-- `pivots` of shape (*, n). Following LAPACK sytrf, the unit lower-triangular
+-- multipliers are stored below the diagonal and the diagonal blocks of D on
+-- the diagonal. A singular matrix raises; use ldl_factor_ex to report it
+-- through info. The CPU path supports float32/float64 only, and the
+-- factorization has no implemented derivative.
+function Tensor:ldl_factor(opts)
+  if self:dim() < 2 then
+    error("ldl_factor expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("ldl_factor expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("ldl_factor supports float32 and float64 tensors", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("ldl_factor options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not ldl_factor_options[name] then
+      error("ldl_factor got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  if opts.hermitian ~= nil and type(opts.hermitian) ~= "boolean" then
+    error("ldl_factor hermitian must be a boolean", 3)
+  end
+  local ld_pointer = ffi.new("lt_tensor*[1]")
+  local pivots_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_ldl_factor(self.h, opts.hermitian == true and 1 or 0,
+    ld_pointer, pivots_pointer))
+  return wrap(ld_pointer[0]), wrap(pivots_pointer[0])
+end
+
 local pinv_options = {
   atol = true,
   rtol = true,

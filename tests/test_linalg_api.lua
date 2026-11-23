@@ -1385,3 +1385,81 @@ test("solve_ex reports singular matrices and validates inputs", function()
     })
   end, "check_errors must be a boolean")
 end)
+
+test("ldl_factor returns compact symmetric factors", function()
+  local a = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local ld, pivots = a:ldl_factor()
+  assert_tensor(ld, { { 4, 0 }, { 0.5, 2 } }, 1e-12)
+  assert_tensor(pivots, { 1, 2 }, 0)
+  assert_dtype(ld, "float64")
+  assert_dtype(pivots, "int32")
+  assert_shape(pivots, { 2 })
+
+  -- Rebuild A = L D L^T for this 1x1-pivot factorization.
+  local l = torch.zeros(2, 2, { dtype = torch.float64 })
+  local d = torch.zeros(2, 2, { dtype = torch.float64 })
+  for i = 1, 2 do
+    l:set(i, i, 1)
+    d:set(i, i, ld:get(i, i))
+    for j = 1, i - 1 do l:set(i, j, ld:get(i, j)) end
+  end
+  assert_tensor(l:matmul(d):matmul(l:t()), a:totable(), 1e-12)
+
+  local alias_ld, alias_pivots = torch.linalg.ldl_factor(a)
+  assert_tensor(alias_ld, ld:totable(), 0)
+  assert_tensor(alias_pivots, pivots:totable(), 0)
+
+  -- For real inputs hermitian is accepted and has no effect.
+  local hermitian_ld, hermitian_pivots = a:ldl_factor({ hermitian = true })
+  assert_tensor(hermitian_ld, ld:totable(), 0)
+  assert_tensor(hermitian_pivots, pivots:totable(), 0)
+
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 2, 1 }, { 1, 2 } },
+  }, { dtype = torch.float64 })
+  local batch_ld, batch_pivots = batch:ldl_factor()
+  assert_shape(batch_ld, { 2, 2, 2 })
+  assert_shape(batch_pivots, { 2, 2 })
+  assert_tensor(batch_ld:select(1, 1), ld:totable(), 1e-12)
+  assert_tensor(batch_ld:select(1, 2), { { 2, 0 }, { 0.5, 1.5 } }, 1e-12)
+  assert_tensor(batch_pivots, { { 1, 2 }, { 1, 2 } }, 0)
+
+  local empty_ld, empty_pivots =
+    torch.zeros(0, 0, { dtype = torch.float64 }):ldl_factor()
+  assert_shape(empty_ld, { 0, 0 })
+  assert_shape(empty_pivots, { 0 })
+  assert_dtype(empty_pivots, "int32")
+
+  assert_dtype(torch.eye(2):ldl_factor(), "float32")
+end)
+
+test("ldl_factor validates shapes, dtypes, and options", function()
+  assert_error(function()
+    torch.ones(3):ldl_factor()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):ldl_factor()
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):ldl_factor()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):ldl_factor()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.tensor({ { true, false }, { false, true } }):ldl_factor()
+  end, "float32 and float64")
+  assert_error(function()
+    float_matrix({ { 4, 2 }, { 2, 3 } }):ldl_factor("options")
+  end, "options must be a table")
+  assert_error(function()
+    float_matrix({ { 4, 2 }, { 2, 3 } }):ldl_factor({ upper = true })
+  end, "unknown option")
+  assert_error(function()
+    float_matrix({ { 4, 2 }, { 2, 3 } }):ldl_factor({ hermitian = 1 })
+  end, "hermitian must be a boolean")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):ldl_factor()
+  end, "singular")
+end)
