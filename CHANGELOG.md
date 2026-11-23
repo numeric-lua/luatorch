@@ -3,6 +3,42 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.29.0] — 2026-11-23
+
+### Added
+
+- `torch.linalg.eigh` / `Tensor:eigh(uplo?)` and
+  `torch.linalg.eigvalsh` / `Tensor:eigvalsh(uplo?)` expose real symmetric
+  eigendecomposition through `at::linalg_eigh` and `at::linalg_eigvalsh`;
+  eigenvalues are ascending, eigenvectors are orthonormal columns, lower or
+  upper triangle selection is validated, and square, batched, and empty
+  float32/float64 inputs are supported with autograd;
+- `torch.linalg.cholesky_ex` / `Tensor:cholesky_ex(opts?)` returns the
+  Cholesky factor plus an int32 `info` tensor, keeps the factor on failed
+  factorizations by default, raises with `check_errors=true`, and supports
+  `upper`, batches, and empty matrices;
+- `torch.linalg.inv_ex` / `Tensor:inv_ex(opts?)` returns the inverse plus an
+  int32 `info` tensor, reports singular batch elements without raising by
+  default, raises with `check_errors=true`, and differentiates through the
+  inverse;
+- `torch.linalg.norm` dispatches flattened, vector, and matrix norms from
+  `ord` and `dim`, including integer dimensions and one- or two-element
+  dimension tables; `vector_norm` gains zero, negative finite, and `-inf`
+  orders plus flattened keepdim shaping;
+- `torch.linalg.matrix_norm` now accepts batches, arbitrary dimension pairs,
+  `keepdim`, and the nuclear norm, while preserving the historical Lua-number
+  result for plain 2-D inputs;
+- 493 tests cover the new values, reconstructions, UPLO/triangle handling,
+  batch and empty inputs, `info` diagnostics, central-difference gradients,
+  all norm orders, dimension pairs, keepdim shapes, and validation errors.
+
+### Changed
+
+- `docs/api.md`, the docs API guards, README status/examples/feature table,
+  roadmap, release notes, and the `0.29.0` rockspec describe or guard the new
+  APIs; C++ changes are limited to four shim entry points plus their header
+  and FFI declarations.
+
 ## [0.28.0] — 2026-11-23
 
 ### Added

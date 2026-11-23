@@ -246,6 +246,22 @@ local x = torch.linalg.tensorsolve(A, b)   -- solve tensordot(A, x, x:dim()) = b
 local q = torch.linalg.householder_product(A, tau)  -- Q from reflectors
 ```
 
+The 0.29 linalg additions cover real symmetric eigendecomposition and
+error-reporting factorizations. `eigh`/`eigvalsh` return ascending eigenvalues
+and orthonormal eigenvectors, `cholesky_ex`/`inv_ex` return an int32 `info`
+tensor instead of raising by default, and `torch.linalg.norm` dispatches
+vector and matrix orders. `matrix_norm` now accepts batches, arbitrary
+dimension pairs, `keepdim`, and the nuclear norm:
+
+```lua
+local a = torch.tensor({{2, 1}, {1, 3}}, {dtype = torch.float64})
+local w, v = torch.linalg.eigh(a)            -- ascending w, columns of v
+local l, info = torch.linalg.cholesky_ex(a)  -- info == 0 on success
+local inv, iinfo = torch.linalg.inv_ex(a)    -- iinfo > 0 when singular
+print(torch.linalg.norm(a, 2))               -- spectral norm
+print(torch.linalg.matrix_norm(a, "nuc"))    -- nuclear norm
+```
+
 ## Profiling
 
 `torch.profiler` optionally records per-tensor-method call counts and CPU time,
@@ -262,10 +278,14 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.28.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.29.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **474 tests**. The 0.28
-> additions are `torch.linalg.svdvals`, `torch.linalg.vecdot`,
+> first-order fused backward, fused reductions, and **493 tests**. The 0.29
+> additions are `torch.linalg.eigh`/`eigvalsh`, `torch.linalg.cholesky_ex`,
+> `torch.linalg.inv_ex`, the `torch.linalg.norm` dispatcher, and batched
+> `torch.linalg.matrix_norm` with dimension-pair/keepdim support and the
+> nuclear norm, with real-valued validation, autograd, tests, and docs. The
+> 0.28 additions are `torch.linalg.svdvals`, `torch.linalg.vecdot`,
 > `torch.linalg.tensorinv`, `torch.linalg.tensorsolve`, and
 > `torch.linalg.householder_product`, with real-valued validation, autograd,
 > tests, and docs. The 0.27 additions are `torch.lu_unpack`,
@@ -412,7 +432,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Dtypes | float32/64/16, int8/16/32/64, uint8, bool; Torch7 typed constructors |
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `det`, `solve`, `solve_triangular`, `lu`, `lu_factor`, `lu_solve`, `lu_unpack`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_triangular`, `lu`, `lu_factor`, `lu_solve`, `lu_unpack`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

@@ -1,3 +1,32 @@
+# luatorch 0.29.0
+
+- five real-valued `torch.linalg` gaps are covered: `eigh`/`eigvalsh`,
+  `cholesky_ex`, `inv_ex`, the `norm` dispatcher, and a batched
+  `matrix_norm` that accepts dimension pairs, `keepdim`, and `"nuc"`;
+- `eigh` returns ascending eigenvalues and orthonormal eigenvectors for real
+  symmetric square or batched matrices, reads `"L"` by default, accepts
+  `"U"`, and exposes `eigvalsh` without materializing eigenvectors. Both
+  reject non-square, float16/integer/bool, and invalid `UPLO` inputs;
+- `cholesky_ex` and `inv_ex` return an int32 `info` tensor alongside the
+  factor or inverse. Successful entries are zero, failures are positive, and
+  the result is still returned by default; `check_errors=true` raises the
+  LAPACK message instead. Both support batches and empty matrices;
+- `torch.linalg.norm` dispatches flattened, vector, and matrix norms like
+  PyTorch: no `dim` plus no `ord` gives the flattened 2-norm, explicit `ord`
+  without `dim` requires 1-D/2-D input, an integer dimension is a vector norm,
+  and a two-element dimension table is a matrix norm. `vector_norm` now
+  supports zero, negative finite, and `-inf` orders;
+- `matrix_norm` supports every real matrix order (`"fro"`, `"nuc"`, `1`,
+  `-1`, `2`, `-2`, `inf`, `-inf`), arbitrary dimension pairs, batches, empty
+  batches, and `keepdim`. Plain 2-D calls still return a Lua number;
+- 493 tests cover known values, reconstruction identities, lower/upper
+  triangles, batch and empty inputs, `info` diagnostics, central-difference
+  gradients, all vector/matrix norm orders, dimension pairs, keepdim shapes,
+  and validation errors; `./scripts/test.sh` is green;
+- docs, docs guards, README status/examples/feature table, roadmap, CHANGELOG,
+  and the `0.29.0` rockspec are updated. C++ changes are limited to four shim
+  entry points and their header/FFI declarations; no timing gate was added.
+
 # luatorch 0.28.0
 
 - five more real-valued `torch.linalg` APIs are available:
