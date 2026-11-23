@@ -674,6 +674,25 @@ print(torch.linalg.vecdot(x, y):totable())   -- {17, 53}
 print(x:vecdot(y, 1):totable())              -- {23, 34}
 ```
 
+`torch.linalg.matrix_norm(a, ord?, dim1?, dim2?, keepdim?)` supports the
+matrix orders `"fro"`, `"nuc"`, `1`, `-1`, `2`, `-2`, `math.huge`, and
+`-math.huge`, with `"fro"` as the default. Unlike the older 2-D-only form it
+accepts batched inputs, reduces any dimension pair (`dim1`/`dim2` default to
+the last two dimensions), and keeps the reduced dimensions as size one when
+`keepdim` is true. The `2`, `-2`, and `"nuc"` orders use the SVD path and
+therefore require float32/float64; the other orders use reductions and accept
+float16 as well. For a plain 2-D input with the default dimensions and no
+`keepdim`, the historical Lua-number result is preserved:
+
+```lua
+local a = torch.tensor({{{1, 2}, {3, 4}}, {{2, 0}, {0, 1}}},
+  {dtype = torch.float64})
+print(torch.linalg.matrix_norm(a, "fro"):totable())  -- {5.477, 2.236}
+print(torch.linalg.matrix_norm(a, "nuc"):totable())  -- {5.831, 3}
+local b = torch.arange(1, 25, 1, {dtype = torch.float64}):reshape(2, 3, 4)
+print(torch.linalg.matrix_norm(b, 1, 1, 3, true):sizes())  -- {1, 3, 1}
+```
+
 `torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with a
 dynamic-programming parenthesization that minimizes scalar multiplications.
 The first and last operands may be 1-D vectors (treated as a row and column
@@ -998,7 +1017,8 @@ torch.ger(a, b)                  -- outer product of two vectors
 torch.einsum(equation, ...)      -- validated Einstein summation
 torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
-torch.linalg.matrix_norm(a, ord) -- fro, 2, -2, 1, -1, inf, -inf
+torch.linalg.matrix_norm(a, ord?, dim1?, dim2?, keepdim?)
+                                  -- fro, nuc, 2, -2, 1, -1, inf, -inf
 torch.linalg.cond(a, p?)         -- 2, 1, inf, fro
 torch.linalg.matrix_rank(a, tol?)
 torch.linalg.matrix_power(a, n)  -- integer matrix power

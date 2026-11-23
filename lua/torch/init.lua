@@ -730,6 +730,111 @@ end
 
 -- linear algebra -------------------------------------------------------------
 
+-- Resolve a 1-based linalg dimension, accepting negative values. Kept local
+-- so matrix_norm and the norm dispatcher validate dimensions identically.
+local function linalg_dim(value, rank, name)
+  if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+      value == math.huge or value == -math.huge then
+    error(name .. " dimension must be an integer", 3)
+  end
+  local dim = math.floor(value)
+  if dim < 0 then dim = rank + dim + 1 end
+  if dim < 1 or dim > rank then
+    error(string.format("%s dimension out of range (got %s, expected 1..%d)",
+      name, tostring(value), rank), 3)
+  end
+  return dim
+end
+
+-- Compute a matrix norm over an arbitrary pair of dimensions. The selected
+-- dimensions are moved to the end, batch dimensions are flattened only for
+-- the SVD-backed orders, and keepdim restores the original rank with the two
+-- reduced dimensions set to one.
+local function matrix_norm_tensor(a, ord, dim1, dim2, keepdim)
+  if ord == nil then ord = "fro" end
+  local rank = a:dim()
+  if rank < 2 then
+    error("matrix_norm expects a tensor with at least 2 dimensions", 3)
+  end
+  if dim1 == nil then dim1 = rank - 1 end
+  if dim2 == nil then dim2 = rank end
+  dim1 = linalg_dim(dim1, rank, "matrix_norm")
+  dim2 = linalg_dim(dim2, rank, "matrix_norm")
+  if dim1 == dim2 then
+    error("matrix_norm dims must be different", 3)
+  end
+
+  local valid_ord = ord == "fro" or ord == "nuc" or ord == 1 or ord == -1 or
+    ord == 2 or ord == -2 or ord == math.huge or ord == -math.huge
+  if not valid_ord then
+    error("matrix_norm supports 'fro', 'nuc', 1, -1, 2, -2, inf, and -inf", 3)
+  end
+  if ord == "nuc" or ord == 2 or ord == -2 then
+    local dtype = a:dtype()
+    if dtype ~= "float32" and dtype ~= "float64" then
+      error("matrix_norm spectral and nuclear orders support float32 and " ..
+        "float64 tensors", 3)
+    end
+  end
+
+  local permutation = {}
+  for i = 1, rank do
+    if i ~= dim1 and i ~= dim2 then
+      permutation[#permutation + 1] = i
+    end
+  end
+  permutation[#permutation + 1] = dim1
+  permutation[#permutation + 1] = dim2
+  local permuted = a:permute(unpack(permutation))
+
+  local batch_shape = {}
+  for i = 1, rank - 2 do batch_shape[i] = permuted:size(i) end
+  local rows, columns = permuted:size(-2), permuted:size(-1)
+
+  local result
+  if ord == "fro" then
+    result = permuted:pow(2):sum(-1):sum(-1):sqrt()
+  elseif ord == 1 or ord == -1 then
+    local sums = permuted:abs():sum(-2)
+    result = ord == 1 and sums:max(-1) or sums:min(-1)
+  elseif ord == math.huge or ord == -math.huge then
+    local sums = permuted:abs():sum(-1)
+    result = ord == math.huge and sums:max(-1) or sums:min(-1)
+  else
+    local count = 1
+    for i = 1, #batch_shape do count = count * batch_shape[i] end
+    if count == 0 then
+      -- An empty batch has no matrices to decompose; preserve its shape.
+      result = permuted:pow(2):sum(-1):sum(-1):sqrt()
+    else
+      local _, singular = permuted:reshape(count, rows, columns):svd(false)
+      if ord == "nuc" then
+        result = singular:sum(-1)
+      elseif ord == 2 then
+        result = singular:max(-1)
+      else
+        result = singular:min(-1)
+      end
+    end
+  end
+
+  if result:dim() ~= #batch_shape then
+    result = result:reshape(batch_shape)
+  end
+  if keepdim then
+    local shape = {}
+    for i = 1, rank do
+      if i == dim1 or i == dim2 then
+        shape[i] = 1
+      else
+        shape[i] = a:size(i)
+      end
+    end
+    result = result:reshape(shape)
+  end
+  return result
+end
+
 torch.linalg = {
   inv = function(a) return a:inverse() end,
   inv_ex = function(a, opts)
@@ -853,25 +958,17 @@ torch.linalg = {
     end
     return rank
   end,
-  matrix_norm = function(a, ord)
-    if not Tensor.is_tensor(a) or a:dim() ~= 2 then
-      error("matrix_norm expects a 2-D tensor", 3)
+  matrix_norm = function(a, ord, dim1, dim2, keepdim)
+    if not Tensor.is_tensor(a) then
+      error("matrix_norm expects a tensor", 3)
     end
-    if ord == nil or ord == "fro" then
-      return a:norm(2):item()
+    local default_dims = dim1 == nil and dim2 == nil
+    local result = matrix_norm_tensor(a, ord, dim1, dim2, keepdim)
+    -- Preserve the historical Lua-number result for a plain 2-D matrix.
+    if default_dims and not keepdim and result:dim() == 0 then
+      return result:item()
     end
-    local row_sums = a:abs():sum(2)
-    local column_sums = a:abs():sum(1)
-    if ord == 2 or ord == -2 then
-      local _, singular_values = a:svd()
-      if ord == 2 then return singular_values:max():item() end
-      return singular_values:min():item()
-    end
-    if ord == 1 then return column_sums:max():item() end
-    if ord == -1 then return column_sums:min():item() end
-    if ord == math.huge then return row_sums:max():item() end
-    if ord == -math.huge then return row_sums:min():item() end
-    error("matrix_norm supports 'fro', 2, -2, 1, -1, inf, and -inf", 3)
+    return result
   end,
 }
 

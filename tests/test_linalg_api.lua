@@ -941,3 +941,120 @@ test("inv_ex validates options, shapes, and dtypes", function()
     torch.ones(2, 2, { dtype = torch.bool }):inv_ex()
   end, "float32 and float64")
 end)
+
+test("matrix_norm handles batches and all orders", function()
+  local batch = torch.tensor({
+    { { 1, 2 }, { 3, 4 } },
+    { { 2, 0 }, { 0, 1 } },
+  }, { dtype = torch.float64 })
+  local expected = {
+    { "fro", { math.sqrt(30), math.sqrt(5) } },
+    { "nuc", { 5.830951894845301, 3 } },
+    { 1, { 6, 2 } },
+    { -1, { 4, 1 } },
+    { 2, { 5.464985704219043, 2 } },
+    { -2, { 0.3659661906262576, 1 } },
+    { math.huge, { 7, 2 } },
+    { -math.huge, { 3, 1 } },
+  }
+  for _, entry in ipairs(expected) do
+    local norm = torch.linalg.matrix_norm(batch, entry[1])
+    assert_shape(norm, { 2 })
+    assert_tensor(norm, entry[2], 1e-10)
+    for i = 1, 2 do
+      assert_near(norm:get(i), torch.linalg.matrix_norm(
+        batch:select(1, i), entry[1]))
+    end
+  end
+
+  local empty = torch.linalg.matrix_norm(torch.zeros(0, 2, 3, {
+    dtype = torch.float64,
+  }), "nuc")
+  assert_shape(empty, { 0 })
+end)
+
+test("matrix_norm reduces arbitrary dimension pairs and keepdims", function()
+  local tensor = torch.arange(1, 25, 1, {
+    dtype = torch.float64,
+  }):reshape(2, 3, 4)
+  assert_tensor(torch.linalg.matrix_norm(tensor, "fro", 1, 3), {
+    29.597297173897484, 39.344631145812, 49.759421218498915,
+  }, 1e-6)
+  assert_tensor(torch.linalg.matrix_norm(tensor, 2, 1, 3), {
+    29.541494486236118, 39.32095234720612, 49.74772644714978,
+  }, 1e-6)
+  assert_tensor(torch.linalg.matrix_norm(tensor, "nuc", 1, 3), {
+    31.35811319132562, 40.68576241045496, 50.826481905793855,
+  }, 1e-6)
+
+  local kept = torch.linalg.matrix_norm(tensor, 1, 1, 3, true)
+  assert_shape(kept, { 1, 3, 1 })
+  assert_tensor(kept, { { { 20 }, { 28 }, { 36 } } }, 1e-12)
+  assert_shape(torch.linalg.matrix_norm(tensor, "fro", 2, 3, true),
+    { 2, 1, 1 })
+  assert_shape(torch.linalg.matrix_norm(tensor, "fro", 3, 1, true),
+    { 1, 3, 1 })
+end)
+
+test("matrix_norm gradients match central differences", function()
+  local values = {
+    { { 1.0, 2.0, 3.0, 4.0 }, { 5.0, 6.0, 7.0, 8.0 },
+      { 9.0, 10.0, 11.0, 12.0 } },
+    { { 2.0, 1.0, 0.5, 1.5 }, { 0.0, 3.0, 1.0, 2.0 },
+      { 1.0, 0.0, 2.5, 4.0 } },
+  }
+  local tensor = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local loss = torch.linalg.matrix_norm(tensor, "fro", 1, 3):sum() +
+    torch.linalg.matrix_norm(tensor, 2, 1, 3):sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(i, j, k, delta)
+    local copy = deep_copy(values)
+    copy[i][j][k] = copy[i][j][k] + delta
+    local perturbed = torch.tensor(copy, { dtype = torch.float64 })
+    return (torch.linalg.matrix_norm(perturbed, "fro", 1, 3):sum() +
+      torch.linalg.matrix_norm(perturbed, 2, 1, 3):sum()):item()
+  end
+  for i = 1, 2 do
+    for j = 1, 3 do
+      for k = 1, 4 do
+        assert_near(tensor:grad():get(i, j, k),
+          (numeric(i, j, k, eps) - numeric(i, j, k, -eps)) / (2 * eps),
+          1e-5)
+      end
+    end
+  end
+end)
+
+test("matrix_norm preserves legacy results and validates inputs", function()
+  local matrix = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_eq(type(torch.linalg.matrix_norm(matrix, "fro")), "number")
+  assert_near(torch.linalg.matrix_norm(matrix, "fro"), math.sqrt(30), 1e-12)
+  assert_shape(torch.linalg.matrix_norm(matrix, "fro", 1, 2, true), { 1, 1 })
+
+  assert_error(function()
+    torch.linalg.matrix_norm(torch.ones(3), "fro")
+  end, "at least 2 dimensions")
+  assert_error(function()
+    torch.linalg.matrix_norm(matrix, "fro", 1, 1)
+  end, "dims must be different")
+  assert_error(function()
+    torch.linalg.matrix_norm(matrix, 3)
+  end, "matrix_norm supports")
+  assert_error(function()
+    torch.linalg.matrix_norm(matrix, "fro", 1, 3)
+  end, "out of range")
+  assert_error(function()
+    torch.linalg.matrix_norm(matrix, "fro", 1.5, 2)
+  end, "integer")
+  assert_error(function()
+    torch.linalg.matrix_norm(torch.ones(2, 2, { dtype = torch.float16 }), 2)
+  end, "spectral and nuclear")
+  assert_error(function()
+    torch.linalg.matrix_norm(torch.ones(2, 2, { dtype = torch.int64 }), "nuc")
+  end, "spectral and nuclear")
+end)
