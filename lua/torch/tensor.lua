@@ -1544,6 +1544,56 @@ function Tensor:cholesky(upper)
   return wrap(lib.lt_linalg_cholesky(self.h, upper and 1 or 0))
 end
 
+local function uplo_argument(uplo, name)
+  if uplo == nil then return "L" end
+  if type(uplo) ~= "string" then
+    error(name .. " UPLO must be 'L' or 'U'", 3)
+  end
+  local normalized = uplo:upper()
+  if normalized ~= "L" and normalized ~= "U" then
+    error(name .. " UPLO must be 'L' or 'U'", 3)
+  end
+  return normalized
+end
+
+-- Eigenvalues and eigenvectors of real symmetric (or batched symmetric)
+-- matrices. The lower triangle is used by default; pass "U" to read the
+-- upper triangle. Eigenvalues are returned in ascending order and the
+-- eigenvectors are the columns of the second result, matching eigh.
+function Tensor:eigh(uplo)
+  if self:dim() < 2 then
+    error("eigh expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("eigh expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("eigh supports float32 and float64 tensors", 3)
+  end
+  local values_pointer = ffi.new("lt_tensor*[1]")
+  local vectors_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_eigh(self.h, uplo_argument(uplo, "eigh"),
+    values_pointer, vectors_pointer))
+  return wrap(values_pointer[0]), wrap(vectors_pointer[0])
+end
+
+-- Eigenvalues only, through at::linalg_eigvalsh so the eigenvectors are not
+-- materialized. Uses the same square/batch and dtype rules as eigh.
+function Tensor:eigvalsh(uplo)
+  if self:dim() < 2 then
+    error("eigvalsh expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("eigvalsh expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("eigvalsh supports float32 and float64 tensors", 3)
+  end
+  return wrap(lib.lt_linalg_eigvalsh(self.h, uplo_argument(uplo, "eigvalsh")))
+end
+
 function Tensor:svd(full_matrices)
   if full_matrices == nil then full_matrices = true end
   local u_pointer = ffi.new("lt_tensor*[1]")

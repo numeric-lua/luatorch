@@ -2146,6 +2146,31 @@ lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper) {
   LT_CATCH_NULL
 }
 
+int lt_linalg_eigh(lt_tensor* a, const char* uplo,
+                   lt_tensor** eigenvalues, lt_tensor** eigenvectors) {
+  try {
+    clear_error();
+    if (eigenvalues == nullptr || eigenvectors == nullptr) {
+      throw std::runtime_error("eigh: null output pointer");
+    }
+    std::string uplo_string = uplo == nullptr ? "L" : std::string(uplo);
+    auto result = at::linalg_eigh(a->t, uplo_string);
+    *eigenvalues = wrap(std::get<0>(result));
+    *eigenvectors = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
+lt_tensor* lt_linalg_eigvalsh(lt_tensor* a, const char* uplo) {
+  try {
+    clear_error();
+    std::string uplo_string = uplo == nullptr ? "L" : std::string(uplo);
+    return wrap(at::linalg_eigvalsh(a->t, uplo_string));
+  }
+  LT_CATCH_NULL
+}
+
 int lt_linalg_svd(lt_tensor* a, int full_matrices,
                   lt_tensor** U, lt_tensor** S, lt_tensor** Vh) {
   try {

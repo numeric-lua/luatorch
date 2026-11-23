@@ -326,6 +326,8 @@ a:solve(b)          -- solve a x = b (b may be a vector or matrix)
 a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
+a:eigh(uplo?)          -- real symmetric eigenvalues (ascending) and vectors
+a:eigvalsh(uplo?)      -- real symmetric eigenvalues only
 a:svd(full_matrices?)  -- returns U, S, Vh
 a:svdvals()            -- descending singular values, shape (*, min(m, n))
 a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
@@ -346,6 +348,7 @@ torch.linalg.inv(a)      torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.eigh(a, uplo?)  torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.svdvals(a)  -- descending singular values
 torch.linalg.householder_product(a, tau)  -- Q from Householder reflectors
 torch.linalg.solve_triangular(a, b, opts)
@@ -411,6 +414,26 @@ local tau = torch.tensor({2 / 26}, {dtype = torch.float64})
 print(torch.linalg.householder_product(a, tau):totable())
 -- {{0.9230769230769231}, {-0.2307692307692308}, {-0.3076923076923077}}
 ```
+
+`eigh` computes the eigenvalues and eigenvectors of real symmetric matrices
+or batches of symmetric matrices. It reads the lower triangle by default;
+pass `"U"` (or `"u"`) to read the upper triangle instead. The first result
+holds the eigenvalues in ascending order with shape `(*, n)`, and the second
+holds orthonormal eigenvectors as columns with shape `(*, n, n)`, so
+`V @ diag(w) @ V^T == A`. `eigvalsh` returns only the ascending eigenvalues,
+using a path that does not materialize the eigenvectors:
+
+```lua
+local a = torch.tensor({{2, 1}, {1, 3}}, {dtype = torch.float64})
+local w, v = torch.linalg.eigh(a)
+print(w:totable())                   -- {1.3819660112501, 3.6180339887499}
+print(torch.linalg.eigvalsh(a):totable())  -- same values
+```
+
+Both forms accept batched and empty square matrices, require float32 or
+float64, and support autograd through the eigenvalues and eigenvectors.
+`UPLO` must be `"L"` or `"U"` (case-insensitive); other values, non-square
+inputs, and sub-2-D tensors are rejected by the Lua layer.
 
 `svdvals` returns only the singular values of a matrix or a batch of
 matrices, in descending order, with shape `(*, min(m, n))`. It is equivalent

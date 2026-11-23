@@ -742,6 +742,18 @@ torch.linalg = {
   end,
   lstsq = function(a, b, opts) return a:lstsq(b, opts) end,
   cholesky = function(a, upper) return a:cholesky(upper) end,
+  eigh = function(a, uplo)
+    if not Tensor.is_tensor(a) then
+      error("eigh expects a tensor", 3)
+    end
+    return a:eigh(uplo)
+  end,
+  eigvalsh = function(a, uplo)
+    if not Tensor.is_tensor(a) then
+      error("eigvalsh expects a tensor", 3)
+    end
+    return a:eigvalsh(uplo)
+  end,
   svd = function(a, full_matrices) return a:svd(full_matrices) end,
   svdvals = function(a) return a:svdvals() end,
   qr = function(a, mode) return a:qr(mode) end,

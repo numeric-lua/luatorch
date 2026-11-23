@@ -626,3 +626,110 @@ test("householder_product validates shapes, tau, and dtypes", function()
     a:householder_product(torch.ones(3, { dtype = torch.float64 }))
   end, "tau:size(-1)")
 end)
+
+test("eigh returns ascending eigenvalues and orthonormal eigenvectors", function()
+  local matrix = float_matrix({ { 2, 1 }, { 1, 3 } })
+  local values, vectors = torch.linalg.eigh(matrix)
+  assert_shape(values, { 2 })
+  assert_shape(vectors, { 2, 2 })
+  assert_dtype(values, "float64")
+  assert_dtype(vectors, "float64")
+  assert_true(values:get(1) < values:get(2), "eigenvalues are ascending")
+  assert_near(values:get(1), (5 - math.sqrt(5)) / 2, 1e-12)
+  assert_near(values:get(2), (5 + math.sqrt(5)) / 2, 1e-12)
+
+  local product = vectors:t():matmul(vectors)
+  assert_tensor(product, torch.eye(2, { dtype = torch.float64 }):totable(),
+    1e-12)
+  local diagonal = torch.zeros(2, 2, { dtype = torch.float64 })
+  for i = 1, 2 do diagonal:set(i, i, values:get(i)) end
+  assert_tensor(vectors:matmul(diagonal):matmul(vectors:t()),
+    matrix:totable(), 1e-12)
+
+  local upper_values, upper_vectors = torch.linalg.eigh(matrix, "U")
+  assert_tensor(upper_values, values:totable(), 1e-12)
+  assert_tensor(upper_vectors, vectors:totable(), 1e-12)
+  local lower_values, lower_vectors = torch.linalg.eigh(matrix, "u")
+  assert_tensor(lower_values, values:totable(), 1e-12)
+  assert_tensor(lower_vectors, vectors:totable(), 1e-12)
+  assert_dtype(torch.linalg.eigh(matrix:float()), "float32")
+end)
+
+test("eigh handles batches and empty matrices", function()
+  local batch = torch.tensor({
+    { { 3, 0 }, { 0, 2 } },
+    { { 1, 2 }, { 2, 1 } },
+  }, { dtype = torch.float64 })
+  local values, vectors = batch:eigh()
+  assert_shape(values, { 2, 2 })
+  assert_shape(vectors, { 2, 2, 2 })
+  assert_tensor(values:select(1, 1), { 2, 3 }, 1e-12)
+  assert_tensor(values:select(1, 2), { -1, 3 }, 1e-12)
+  for i = 1, 2 do
+    local single_values, single_vectors = batch:select(1, i):eigh()
+    assert_tensor(values:select(1, i), single_values:totable(), 1e-12)
+    assert_tensor(vectors:select(1, i), single_vectors:totable(), 1e-12)
+  end
+
+  local empty_values, empty_vectors = torch.zeros(2, 0, 0, {
+    dtype = torch.float64,
+  }):eigh()
+  assert_shape(empty_values, { 2, 0 })
+  assert_shape(empty_vectors, { 2, 0, 0 })
+  assert_shape(torch.zeros(0, 0, {
+    dtype = torch.float64,
+  }):eigvalsh(), { 0 })
+end)
+
+test("eigvalsh matches eigh and differentiates analytically", function()
+  local values_a = { { 2.0, 0.4 }, { 0.4, 1.5 } }
+  local matrix = torch.tensor(values_a, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local eigenvalues = torch.linalg.eigvalsh(matrix)
+  local expected, vectors = torch.linalg.eigh(matrix)
+  assert_tensor(eigenvalues, expected:totable(), 1e-12)
+  assert_dtype(torch.linalg.eigvalsh(matrix:float()), "float32")
+
+  local weights = torch.tensor({ 0.75, -1.25 }, { dtype = torch.float64 })
+  local loss = (eigenvalues * weights):sum()
+  loss:backward()
+  local diagonal = torch.zeros(2, 2, { dtype = torch.float64 })
+  for i = 1, 2 do diagonal:set(i, i, weights:get(i)) end
+  local analytic = vectors:matmul(diagonal):matmul(vectors:t())
+  assert_tensor(matrix:grad(), analytic:totable(), 1e-10)
+end)
+
+test("eigh validates ranks, square inputs, UPLO, and dtypes", function()
+  assert_error(function()
+    torch.linalg.eigh(torch.ones(3))
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.linalg.eigh(torch.ones(2, 3, 2, { dtype = torch.float64 }))
+  end, "square")
+  assert_error(function()
+    torch.linalg.eigh(torch.ones(2, 2, { dtype = torch.float64 }), "X")
+  end, "UPLO")
+  assert_error(function()
+    torch.linalg.eigh(torch.ones(2, 2, { dtype = torch.float64 }), 1)
+  end, "UPLO")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):eigh()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):eigh()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):eigh()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float64 }):eigvalsh("X")
+  end, "UPLO")
+  assert_error(function()
+    torch.ones(3, 2, { dtype = torch.float64 }):eigvalsh()
+  end, "square")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):eigvalsh()
+  end, "float32 and float64")
+end)

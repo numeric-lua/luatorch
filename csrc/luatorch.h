@@ -207,6 +207,9 @@ lt_tensor* lt_linalg_solve_triangular(lt_tensor* a, lt_tensor* b,
                                       int upper, int left,
                                       int unitriangular);
 lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper);
+int lt_linalg_eigh(lt_tensor* a, const char* uplo,
+                   lt_tensor** eigenvalues, lt_tensor** eigenvectors);
+lt_tensor* lt_linalg_eigvalsh(lt_tensor* a, const char* uplo);
 int lt_linalg_svd(lt_tensor* a, int full_matrices,
                   lt_tensor** U, lt_tensor** S, lt_tensor** Vh);
 int lt_linalg_qr(lt_tensor* a, const char* mode,
