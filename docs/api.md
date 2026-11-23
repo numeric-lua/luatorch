@@ -326,6 +326,7 @@ a:solve(b)          -- solve a x = b (b may be a vector or matrix)
 a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
+a:cholesky_ex(opts?)   -- factor plus int32 info; opts.upper/check_errors
 a:eigh(uplo?)          -- real symmetric eigenvalues (ascending) and vectors
 a:eigvalsh(uplo?)      -- real symmetric eigenvalues only
 a:svd(full_matrices?)  -- returns U, S, Vh
@@ -348,6 +349,7 @@ torch.linalg.inv(a)      torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.cholesky_ex(a, opts?)
 torch.linalg.eigh(a, uplo?)  torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.svdvals(a)  -- descending singular values
 torch.linalg.householder_product(a, tau)  -- Q from Householder reflectors
@@ -413,6 +415,22 @@ local a = torch.tensor({{9}, {3}, {4}}, {dtype = torch.float64})
 local tau = torch.tensor({2 / 26}, {dtype = torch.float64})
 print(torch.linalg.householder_product(a, tau):totable())
 -- {{0.9230769230769231}, {-0.2307692307692308}, {-0.3076923076923077}}
+```
+
+`cholesky_ex` is the error-returning form of `cholesky`. It returns the
+factor and an int32 `info` tensor whose entries are zero on success or the
+order of the first leading minor that is not positive-definite. Inputs may be
+batched square matrices; `info` then has the batch shape. By default the
+factor is returned even when `info` is positive, matching PyTorch. Pass
+`{ upper = true }` for `A = U^T U` or `{ check_errors = true }` to raise on a
+failed factorization instead. Only float32/float64 are accepted, the factor is
+differentiable, and the integer `info` stays detached:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local l, info = torch.linalg.cholesky_ex(a)
+print(info:item())                    -- 0
+print(l:matmul(l:t()):allclose(a))    -- true
 ```
 
 `eigh` computes the eigenvalues and eigenvectors of real symmetric matrices

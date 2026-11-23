@@ -1544,6 +1544,48 @@ function Tensor:cholesky(upper)
   return wrap(lib.lt_linalg_cholesky(self.h, upper and 1 or 0))
 end
 
+local cholesky_ex_options = {
+  upper = true,
+  check_errors = true,
+}
+
+-- Error-returning Cholesky factorization. Returns the factor and an int32
+-- info tensor: info == 0 means success and a positive info reports the first
+-- leading minor that is not positive-definite. With check_errors = true the
+-- underlying LAPACK path raises instead, matching torch.linalg.cholesky_ex.
+function Tensor:cholesky_ex(opts)
+  if self:dim() < 2 then
+    error("cholesky_ex expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("cholesky_ex expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("cholesky_ex supports float32 and float64 tensors", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("cholesky_ex options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not cholesky_ex_options[name] then
+      error("cholesky_ex got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  for _, name in ipairs({ "upper", "check_errors" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("cholesky_ex " .. name .. " must be a boolean", 3)
+    end
+  end
+  local factor_pointer = ffi.new("lt_tensor*[1]")
+  local info_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_cholesky_ex(self.h, opts.upper and 1 or 0,
+    opts.check_errors and 1 or 0, factor_pointer, info_pointer))
+  return wrap(factor_pointer[0]), wrap(info_pointer[0])
+end
+
 local function uplo_argument(uplo, name)
   if uplo == nil then return "L" end
   if type(uplo) ~= "string" then

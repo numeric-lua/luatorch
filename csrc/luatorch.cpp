@@ -2146,6 +2146,21 @@ lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper) {
   LT_CATCH_NULL
 }
 
+int lt_linalg_cholesky_ex(lt_tensor* a, int upper, int check_errors,
+                          lt_tensor** L, lt_tensor** info) {
+  try {
+    clear_error();
+    if (L == nullptr || info == nullptr) {
+      throw std::runtime_error("cholesky_ex: null output pointer");
+    }
+    auto result = at::linalg_cholesky_ex(a->t, upper != 0, check_errors != 0);
+    *L = wrap(std::get<0>(result));
+    *info = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 int lt_linalg_eigh(lt_tensor* a, const char* uplo,
                    lt_tensor** eigenvalues, lt_tensor** eigenvectors) {
   try {

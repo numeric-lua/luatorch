@@ -742,6 +742,12 @@ torch.linalg = {
   end,
   lstsq = function(a, b, opts) return a:lstsq(b, opts) end,
   cholesky = function(a, upper) return a:cholesky(upper) end,
+  cholesky_ex = function(a, opts)
+    if not Tensor.is_tensor(a) then
+      error("cholesky_ex expects a tensor", 3)
+    end
+    return a:cholesky_ex(opts)
+  end,
   eigh = function(a, uplo)
     if not Tensor.is_tensor(a) then
       error("eigh expects a tensor", 3)

@@ -733,3 +733,107 @@ test("eigh validates ranks, square inputs, UPLO, and dtypes", function()
     torch.ones(2, 2, { dtype = torch.int64 }):eigvalsh()
   end, "float32 and float64")
 end)
+
+test("cholesky_ex factors matrices and returns info", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local factor, info = torch.linalg.cholesky_ex(matrix)
+  assert_shape(factor, { 2, 2 })
+  assert_dtype(factor, "float64")
+  assert_dtype(info, "int32")
+  assert_eq(info:item(), 0)
+  assert_tensor(factor:matmul(factor:t()), matrix:totable(), 1e-12)
+  assert_tensor(factor, matrix:cholesky():totable(), 1e-12)
+
+  local upper, upper_info = matrix:cholesky_ex({ upper = true })
+  assert_eq(upper_info:item(), 0)
+  assert_tensor(upper:t():matmul(upper), matrix:totable(), 1e-12)
+  assert_tensor(upper, matrix:cholesky(true):totable(), 1e-12)
+
+  local single = torch.linalg.cholesky_ex(torch.eye(2):reshape(1, 2, 2))
+  assert_shape(single, { 1, 2, 2 })
+  assert_dtype(torch.linalg.cholesky_ex(matrix:float()), "float32")
+  local empty, empty_info = torch.zeros(0, 0, {
+    dtype = torch.float64,
+  }):cholesky_ex()
+  assert_shape(empty, { 0, 0 })
+  assert_eq(empty_info:item(), 0)
+end)
+
+test("cholesky_ex reports non-positive-definite matrices", function()
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 1, 2 }, { 2, 1 } },
+  }, { dtype = torch.float64 })
+  local _, info = torch.linalg.cholesky_ex(batch)
+  assert_shape(info, { 2 })
+  assert_eq(info:get(1), 0)
+  assert_true(info:get(2) > 0, "second matrix should fail the factorization")
+
+  local indefinite = float_matrix({ { 1, 2 }, { 2, 1 } })
+  local _, failed_info = indefinite:cholesky_ex()
+  assert_true(failed_info:item() > 0)
+  assert_error(function()
+    indefinite:cholesky_ex({ check_errors = true })
+  end, "positive-definite")
+end)
+
+test("cholesky_ex differentiates through the factor", function()
+  local values = { { 4.0, 1.0 }, { 1.0, 3.0 } }
+  local matrix = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local factor = matrix:cholesky_ex()
+  local loss = factor:sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(i, j, delta)
+    local copy = { { values[1][1], values[1][2] },
+      { values[2][1], values[2][2] } }
+    copy[i][j] = copy[i][j] + delta
+    if i ~= j then copy[j][i] = copy[j][i] + delta end
+    return torch.tensor(copy, { dtype = torch.float64 }):cholesky():sum():item()
+  end
+  -- ATen treats the input as symmetric and returns a symmetric gradient, so
+  -- compare the directional derivative along a symmetric perturbation.
+  for i = 1, 2 do
+    for j = 1, i do
+      local actual = matrix:grad():get(i, j)
+      if i ~= j then actual = actual + matrix:grad():get(j, i) end
+      assert_near(actual,
+        (numeric(i, j, eps) - numeric(i, j, -eps)) / (2 * eps), 1e-5)
+    end
+  end
+end)
+
+test("cholesky_ex validates options, shapes, and dtypes", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  assert_error(function()
+    matrix:cholesky_ex({ upper = 1 })
+  end, "must be a boolean")
+  assert_error(function()
+    matrix:cholesky_ex({ check_errors = "yes" })
+  end, "must be a boolean")
+  assert_error(function()
+    matrix:cholesky_ex({ pivot = true })
+  end, "unknown option")
+  assert_error(function()
+    matrix:cholesky_ex(1)
+  end, "options must be a table")
+  assert_error(function()
+    torch.ones(3):cholesky_ex()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):cholesky_ex()
+  end, "square")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):cholesky_ex()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):cholesky_ex()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):cholesky_ex()
+  end, "float32 and float64")
+end)
