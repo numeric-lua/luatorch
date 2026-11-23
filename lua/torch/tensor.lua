@@ -2063,6 +2063,71 @@ function Tensor:ldl_factor_ex(opts)
   return wrap(ld_pointer[0]), wrap(pivots_pointer[0]), wrap(info_pointer[0])
 end
 
+local ldl_solve_options = {
+  hermitian = true,
+}
+
+-- Solve A X = B from the compact LDL^T factor and 1-based pivots returned by
+-- ldl_factor or ldl_factor_ex. B has shape (*, n, k); a single right-hand side
+-- is a column matrix. Batch dimensions of B may broadcast over the factor,
+-- both operands must share float32/float64 dtype, and the integer pivots must
+-- match the factor's batch shape. The CPU path has no implemented derivative
+-- for this solve.
+function Tensor:ldl_solve(pivots, other, opts)
+  if not is_tensor(pivots) then
+    error("ldl_solve expects an int32 pivots tensor", 3)
+  end
+  if not is_tensor(other) then
+    error("ldl_solve expects a tensor right-hand side", 3)
+  end
+  if self:dim() < 2 or self:size(-2) ~= self:size(-1) then
+    error("ldl_solve expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("ldl_solve supports float32 and float64 tensors", 3)
+  end
+  if pivots:dtype() ~= "int32" then
+    error("ldl_solve expects pivots with int32 dtype", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("ldl_solve expects the right-hand side to match the matrix dtype", 3)
+  end
+  local n = self:size(-1)
+  if pivots:dim() ~= self:dim() - 1 then
+    error("ldl_solve expects pivots with one dimension less than the matrix", 3)
+  end
+  for dim = 1, self:dim() - 2 do
+    if pivots:size(dim) ~= self:size(dim) then
+      error("ldl_solve expects pivots to match the matrix batch dimensions", 3)
+    end
+  end
+  if pivots:size(-1) ~= n then
+    error("ldl_solve pivots have the wrong length", 3)
+  end
+  if other:dim() < 2 then
+    error("ldl_solve expects a right-hand side with at least 2 dimensions", 3)
+  end
+  if other:size(-2) ~= n then
+    error("ldl_solve right-hand side has the wrong number of rows", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("ldl_solve options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not ldl_solve_options[name] then
+      error("ldl_solve got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  if opts.hermitian ~= nil and type(opts.hermitian) ~= "boolean" then
+    error("ldl_solve hermitian must be a boolean", 3)
+  end
+  return wrap(lib.lt_linalg_ldl_solve(self.h, pivots.h, other.h,
+    opts.hermitian == true and 1 or 0))
+end
+
 local pinv_options = {
   atol = true,
   rtol = true,

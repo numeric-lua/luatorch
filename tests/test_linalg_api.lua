@@ -1543,3 +1543,112 @@ test("ldl_factor_ex reports singular matrices and validates inputs", function()
     })
   end, "check_errors must be a boolean")
 end)
+
+test("ldl_solve solves systems from an LDL factorization", function()
+  local a = float_matrix({
+    { 4, 2, 0 },
+    { 2, 3, 1 },
+    { 0, 1, 2 },
+  })
+  local ld, pivots, info = a:ldl_factor_ex()
+  assert_eq(info:item(), 0)
+  local b = float_matrix({ { 1 }, { 2 }, { 3 } })
+  local solution = ld:ldl_solve(pivots, b)
+  assert_tensor(solution, { { 0.25 }, { 0 }, { 1.5 } }, 1e-12)
+  assert_tensor(solution, a:solve(b):totable(), 1e-12)
+  assert_dtype(solution, "float64")
+
+  local alias_solution = torch.linalg.ldl_solve(ld, pivots, b)
+  assert_tensor(alias_solution, solution:totable(), 1e-12)
+
+  local multiple = float_matrix({
+    { 1, 2 },
+    { 2, 3 },
+    { 3, 4 },
+  })
+  assert_tensor(ld:ldl_solve(pivots, multiple),
+    a:solve(multiple):totable(), 1e-12)
+
+  -- For real inputs the hermitian flag has no effect on the solve.
+  assert_tensor(ld:ldl_solve(pivots, b, { hermitian = true }),
+    solution:totable(), 1e-12)
+
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 2, 1 }, { 1, 2 } },
+  }, { dtype = torch.float64 })
+  local batch_ld, batch_pivots = batch:ldl_factor()
+  local batch_rhs = torch.tensor({
+    { { 1 }, { 2 } },
+    { { 3 }, { 4 } },
+  }, { dtype = torch.float64 })
+  local batch_solution = batch_ld:ldl_solve(batch_pivots, batch_rhs)
+  assert_shape(batch_solution, { 2, 2, 1 })
+  assert_tensor(batch_solution, batch:solve(batch_rhs):totable(), 1e-12)
+
+  -- A right-hand side without batch dimensions broadcasts over the factor.
+  local shared, shared_info = batch:solve_ex(float_matrix({ { 1 }, { 2 } }))
+  assert_tensor(shared_info, { 0, 0 }, 0)
+  assert_tensor(batch_ld:ldl_solve(batch_pivots,
+    float_matrix({ { 1 }, { 2 } })), shared:totable(), 1e-12)
+end)
+
+test("ldl_solve validates factors, pivots, and right-hand sides", function()
+  local a = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local ld, pivots = a:ldl_factor()
+  local rhs = float_matrix({ { 1 }, { 2 } })
+
+  assert_error(function()
+    ld:ldl_solve(2, rhs)
+  end, "int32 pivots tensor")
+  assert_error(function()
+    ld:ldl_solve(pivots, { 1, 2 })
+  end, "tensor right-hand side")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):ldl_solve(pivots, rhs)
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, { dtype = torch.float64 }):ldl_solve(pivots, rhs)
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):ldl_solve(pivots, rhs)
+  end, "float32 and float64")
+  assert_error(function()
+    ld:ldl_solve(pivots:float(), rhs)
+  end, "int32 dtype")
+  assert_error(function()
+    ld:ldl_solve(pivots, torch.ones(2, 1, { dtype = torch.float32 }))
+  end, "match the matrix dtype")
+  assert_error(function()
+    ld:ldl_solve(torch.zeros(1, 2, { dtype = torch.int32 }), rhs)
+  end, "one dimension less")
+  assert_error(function()
+    ld:ldl_solve(torch.zeros(1, { dtype = torch.int32 }), rhs)
+  end, "wrong length")
+  assert_error(function()
+    ld:ldl_solve(pivots, float_matrix({ 1, 2 }))
+  end, "at least 2 dimensions")
+  assert_error(function()
+    ld:ldl_solve(pivots, float_matrix({ { 1 }, { 2 }, { 3 } }))
+  end, "wrong number of rows")
+  assert_error(function()
+    ld:ldl_solve(pivots, rhs, "options")
+  end, "options must be a table")
+  assert_error(function()
+    ld:ldl_solve(pivots, rhs, { left = false })
+  end, "unknown option")
+  assert_error(function()
+    ld:ldl_solve(pivots, rhs, { hermitian = 1 })
+  end, "hermitian must be a boolean")
+
+  local batch_ld, batch_pivots = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 2, 1 }, { 1, 2 } },
+  }, { dtype = torch.float64 }):ldl_factor()
+  assert_error(function()
+    batch_ld:ldl_solve(torch.zeros(3, 2, { dtype = torch.int32 }), rhs)
+  end, "batch dimensions")
+  assert_error(function()
+    batch_ld:ldl_solve(batch_pivots, float_matrix({ { 1 }, { 2 }, { 3 } }))
+  end, "wrong number of rows")
+end)

@@ -342,6 +342,7 @@ a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
 a:lu_unpack(pivots, opts?)    -- unpack packed LU into P, L, U
 a:ldl_factor(opts?)    -- compact LDL^T factor and 1-based block pivots
 a:ldl_factor_ex(opts?) -- factor, pivots, plus int32 info; opts.hermitian/check_errors
+ld:ldl_solve(pivots, b, opts?)  -- solve from a compact LDL^T factor
 a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
 a:matrix_exp()         -- matrix exponential of square/batched matrices
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
@@ -367,6 +368,7 @@ torch.linalg.lu_factor_ex(a, opts?)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
 torch.linalg.ldl_factor(a, opts?)  -- compact LDL^T factor
 torch.linalg.ldl_factor_ex(a, opts?)  -- factor plus int32 info
+torch.linalg.ldl_solve(ld, pivots, b, opts?)  -- solve from an LDL factor
 torch.lu_unpack(lu, pivots, opts?)
 torch.diagonal(a, offset?, dim1?, dim2?)
 torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
@@ -636,6 +638,21 @@ supported:
 local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
 local ld, pivots, info = torch.linalg.ldl_factor_ex(a)
 print(info:item())                    -- 0
+```
+
+`ldl_solve` solves `A X = B` from the `(LD, pivots)` pair produced by
+`ldl_factor` or `ldl_factor_ex`. `B` has shape `(*, n, k)`, so a single
+right-hand side is a column matrix, and its batch dimensions may broadcast
+over the factor. The pivots must be int32 and match the factor's batch shape
+and length, `LD` must be a square float32/float64 matrix or batch, and both
+operands must share the dtype. For real inputs `hermitian` has no effect. The
+CPU path does not implement a derivative for this solve:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local ld, pivots = torch.linalg.ldl_factor(a)
+local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
+print(torch.linalg.ldl_solve(ld, pivots, b):totable())  -- {{-0.125}, {0.75}}
 ```
 
 `pinv` computes the Moore-Penrose pseudoinverse through ATen's SVD-based

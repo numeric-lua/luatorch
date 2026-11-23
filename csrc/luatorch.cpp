@@ -2357,6 +2357,16 @@ int lt_linalg_ldl_factor_ex(lt_tensor* a, int hermitian, int check_errors,
   LT_CATCH_INT
 }
 
+lt_tensor* lt_linalg_ldl_solve(lt_tensor* LD, lt_tensor* pivots,
+                               lt_tensor* b, int hermitian) {
+  try {
+    clear_error();
+    return wrap(at::linalg_ldl_solve(
+        LD->t, pivots->t, b->t, hermitian != 0));
+  }
+  LT_CATCH_NULL
+}
+
 lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
                           int has_atol, int has_rtol) {
   try {
