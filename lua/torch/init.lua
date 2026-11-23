@@ -914,6 +914,12 @@ torch.linalg = {
   end,
   lu = function(a) return a:lu() end,
   lu_factor = function(a) return a:lu_factor() end,
+  lu_factor_ex = function(a, opts)
+    if not Tensor.is_tensor(a) then
+      error("lu_factor_ex expects a tensor", 3)
+    end
+    return a:lu_factor_ex(opts)
+  end,
   lu_solve = function(lu, pivots, b, opts)
     return lu:lu_solve(pivots, b, opts)
   end,

@@ -1148,3 +1148,101 @@ test("torch.linalg.norm validates dispatch and dimensions", function()
     torch.linalg.vector_norm(matrix, "fro")
   end, "ord must be a number")
 end)
+
+test("lu_factor_ex returns compact factors and info", function()
+  local a = float_matrix({ { 4, 3 }, { 2, 1 } })
+  local lu, pivots, info = a:lu_factor_ex()
+  local reference_lu, reference_pivots = a:lu_factor()
+  assert_tensor(lu, reference_lu:totable(), 0)
+  assert_tensor(pivots, reference_pivots:totable(), 0)
+  assert_dtype(lu, "float64")
+  assert_dtype(pivots, "int32")
+  assert_dtype(info, "int32")
+  assert_shape(info, {})
+  assert_eq(info:item(), 0)
+
+  local alias_lu, alias_pivots, alias_info = torch.linalg.lu_factor_ex(a)
+  assert_tensor(alias_lu, lu:totable(), 0)
+  assert_tensor(alias_pivots, pivots:totable(), 0)
+  assert_eq(alias_info:item(), 0)
+
+  local tall = float_matrix({ { 1, 2 }, { 3, 4 }, { 5, 6 } })
+  local tall_lu, tall_pivots, tall_info = tall:lu_factor_ex()
+  local tall_reference_lu, tall_reference_pivots = tall:lu_factor()
+  assert_tensor(tall_lu, tall_reference_lu:totable(), 0)
+  assert_tensor(tall_pivots, tall_reference_pivots:totable(), 0)
+  assert_eq(tall_info:item(), 0)
+
+  local batch = torch.tensor({
+    { { 3, 1 }, { 1, 2 } },
+    { { 4, 2 }, { 1, 3 } },
+  }, { dtype = torch.float64 })
+  local batch_lu, batch_pivots, batch_info = batch:lu_factor_ex()
+  assert_shape(batch_lu, { 2, 2, 2 })
+  assert_shape(batch_pivots, { 2, 2 })
+  assert_shape(batch_info, { 2 })
+  assert_tensor(batch_info, { 0, 0 }, 0)
+
+  local empty_lu, empty_pivots, empty_info =
+    torch.zeros(0, 0, { dtype = torch.float64 }):lu_factor_ex()
+  assert_shape(empty_lu, { 0, 0 })
+  assert_shape(empty_pivots, { 0 })
+  assert_shape(empty_info, {})
+  assert_eq(empty_info:item(), 0)
+
+  -- Disabling pivoting has no CPU LAPACK kernel; reject it explicitly
+  -- instead of leaking ATen's implementation-detail message.
+  local swapped = float_matrix({ { 2, 1 }, { 4, 3 } })
+  assert_error(function()
+    swapped:lu_factor_ex({ pivot = false })
+  end, "CPU backend")
+
+  local gradient_a = torch.tensor({ { 4, 1 }, { 2, 3 } }, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local gradient_lu, gradient_pivots, gradient_info =
+    gradient_a:lu_factor_ex()
+  assert_true(gradient_lu:requires_grad(), "LU carries gradients")
+  assert_true(not gradient_pivots:requires_grad(), "pivots stay detached")
+  assert_true(not gradient_info:requires_grad(), "info stays detached")
+end)
+
+test("lu_factor_ex reports singular matrices and validates inputs", function()
+  local singular = float_matrix({ { 1, 2 }, { 2, 4 } })
+  local lu, pivots, info = singular:lu_factor_ex()
+  assert_shape(lu, { 2, 2 })
+  assert_shape(pivots, { 2 })
+  assert_dtype(info, "int32")
+  assert_eq(info:item(), 2)
+  assert_error(function()
+    singular:lu_factor_ex({ check_errors = true })
+  end, "is zero")
+  assert_error(function()
+    singular:lu_factor()
+  end, "is zero")
+
+  assert_error(function()
+    torch.ones(3):lu_factor_ex()
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):lu_factor_ex()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):lu_factor_ex()
+  end, "float32 and float64")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):lu_factor_ex("options")
+  end, "options must be a table")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):lu_factor_ex({ transpose = true })
+  end, "unknown option")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):lu_factor_ex({ pivot = 1 })
+  end, "pivot must be a boolean")
+  assert_error(function()
+    float_matrix({ { 1, 2 }, { 2, 4 } }):lu_factor_ex({
+      check_errors = "yes",
+    })
+  end, "check_errors must be a boolean")
+end)

@@ -336,6 +336,7 @@ a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
 a:householder_product(tau)  -- Q from compact Householder reflectors
 a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
+a:lu_factor_ex(opts?)  -- packed LU, pivots, plus int32 info; opts.pivot/check_errors
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
 a:lu_unpack(pivots, opts?)    -- unpack packed LU into P, L, U
 a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
@@ -358,6 +359,7 @@ torch.linalg.householder_product(a, tau)  -- Q from Householder reflectors
 torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
+torch.linalg.lu_factor_ex(a, opts?)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
 torch.lu_unpack(lu, pivots, opts?)
 torch.diagonal(a, offset?, dim1?, dim2?)
@@ -529,6 +531,24 @@ upper triangle, and the strict lower triangle stores the multipliers of `L`.
 instead of returning a factorization that would divide by zero later.
 Rectangular and batched inputs are supported, but `lu_solve` requires a
 square factor.
+
+`lu_factor_ex` is the error-reporting form of `lu_factor`. It returns
+`(LU, pivots, info)` with the same packed factor and int32 1-based pivots,
+plus an int32 `info` tensor whose entries are zero on success or positive when
+the corresponding batch element is singular. `pivot` defaults to true and
+`check_errors` defaults to false, matching PyTorch: a singular factorization is
+returned by default, and `{ check_errors = true }` raises instead. The CPU
+LAPACK path has no unpivoted kernel, so `{ pivot = false }` is rejected
+explicitly. Square, rectangular, batched, and empty float32/float64 inputs are
+accepted, and the factor is differentiable:
+
+```lua
+local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
+local lu, pivots, info = torch.linalg.lu_factor_ex(a)
+print(info:item())                    -- 0
+print(lu:lu_solve(pivots, torch.tensor({{1}, {2}},
+  {dtype = torch.float64})):totable())  -- {{2.5}, {-3}}
+```
 
 `lu_solve` solves `A X = B` from the `(LU, pivots)` pair. `left = false`
 solves `X A = B`, and `adjoint = true` solves `A^T X = B` (the real-valued

@@ -1785,6 +1785,52 @@ function Tensor:lu_factor()
   return wrap(lu_pointer[0]), wrap(pivots_pointer[0])
 end
 
+local lu_factor_ex_options = {
+  pivot = true,
+  check_errors = true,
+}
+
+-- Compact LU factorization that reports singularity through an int32 `info`
+-- tensor instead of raising. Returns the packed LU, 1-based pivots, and info;
+-- positive info entries identify a zero U diagonal. `pivot` defaults to true
+-- (the CPU LAPACK path has no unpivoted kernel) and `check_errors` defaults to
+-- false, matching torch.linalg.lu_factor_ex. Square, rectangular, batched, and
+-- empty float32/float64 inputs are accepted.
+function Tensor:lu_factor_ex(opts)
+  if self:dim() < 2 then
+    error("lu_factor_ex expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("lu_factor_ex supports float32 and float64 tensors", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("lu_factor_ex options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not lu_factor_ex_options[name] then
+      error("lu_factor_ex got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  for _, name in ipairs({ "pivot", "check_errors" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("lu_factor_ex " .. name .. " must be a boolean", 3)
+    end
+  end
+  if opts.pivot == false then
+    error("lu_factor_ex pivot=false is not supported on the CPU backend", 3)
+  end
+  local lu_pointer = ffi.new("lt_tensor*[1]")
+  local pivots_pointer = ffi.new("lt_tensor*[1]")
+  local info_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_lu_factor_ex(self.h, 1,
+    opts.check_errors == true and 1 or 0, lu_pointer, pivots_pointer,
+    info_pointer))
+  return wrap(lu_pointer[0]), wrap(pivots_pointer[0]), wrap(info_pointer[0])
+end
+
 local lu_solve_options = {
   left = true,
   adjoint = true,

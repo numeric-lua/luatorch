@@ -62,7 +62,7 @@ test("documented linalg aliases exist", function()
       "slogdet", "solve",
       "solve_triangular", "lstsq", "cholesky", "cholesky_ex", "eigh", "eigvalsh",
       "svd", "qr",
-      "householder_product", "lu", "lu_factor", "lu_solve", "pinv",
+      "householder_product", "lu", "lu_factor", "lu_factor_ex", "lu_solve", "pinv",
       "matrix_exp", "matrix_power",
       "svdvals", "matrix_norm", "norm", "cond", "matrix_rank", "vector_norm",
       "diagonal",
