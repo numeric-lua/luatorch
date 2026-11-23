@@ -1,4 +1,4 @@
-# luatorch API reference (0.29.0)
+# luatorch API reference (0.30.0)
 
 All examples assume:
 
@@ -1132,6 +1132,10 @@ torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
 torch.linalg.matrix_norm(a, ord?, dim1?, dim2?, keepdim?)
                                   -- fro, nuc, 2, -2, 1, -1, inf, -inf
 torch.linalg.norm(a, ord?, dim?, keepdim?)  -- vector/matrix norm dispatcher
+torch.linalg.solve_ex(a, b, opts?)  -- solution plus int32 info
+torch.linalg.lu_factor_ex(a, opts?)  -- packed LU, pivots, plus int32 info
+torch.linalg.ldl_factor(a, opts?) / torch.linalg.ldl_factor_ex(a, opts?)
+torch.linalg.ldl_solve(ld, pivots, b, opts?)  -- solve from an LDL factor
 torch.linalg.cholesky_ex(a, opts?)  -- factor plus int32 info
 torch.linalg.eigh(a, uplo?) / torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.inv_ex(a, opts?)    -- inverse plus int32 info
@@ -1151,6 +1155,6 @@ torch.linalg.multi_dot({a, b, ...})
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.29.0")
+torch.VERSION             -- luatorch version string ("0.30.0")
 torch.version             -- libtorch version string
 ```

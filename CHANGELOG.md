@@ -3,6 +3,45 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.30.0] — 2026-11-23
+
+### Added
+
+- `torch.linalg.lu_factor_ex` / `Tensor:lu_factor_ex(opts?)` returns the
+  packed LU, int32 1-based pivots, and an int32 `info` tensor; `pivot`
+  defaults to true (the CPU backend rejects unpivoted factorization) and
+  `check_errors` defaults to false, so singular batches are reported instead
+  of raising. Square, rectangular, batched, and empty float32/float64 inputs
+  are supported, and the factor is differentiable;
+- `torch.linalg.solve_ex` / `Tensor:solve_ex(b, opts?)` returns the solution
+  plus an int32 `info` tensor; `left` and `check_errors` default to
+  true/false, vector and matrix right-hand sides are supported with
+  broadcast batches, and the solution is differentiable;
+- `torch.linalg.ldl_factor` / `Tensor:ldl_factor(opts?)` exposes compact
+  LDL^T factors through `at::linalg_ldl_factor_ex`: `LD` keeps the same shape
+  as the input and int32 1-based block `pivots` has shape `(*, n)`; real
+  symmetric float32/float64 square, batched, and empty inputs are supported,
+  singular matrices raise a stable message, and `hermitian` is validated;
+- `torch.linalg.ldl_factor_ex` / `Tensor:ldl_factor_ex(opts?)` returns
+  `(LD, pivots, info)`; `info` is zero on success and positive for singular
+  batches, `check_errors=false` is the default, and `check_errors=true`
+  raises. libtorch 2.5 maps the sytrf positive-info code to an internal
+  assertion, so the shim checks `info` itself and reports a stable error;
+- `torch.linalg.ldl_solve` / `Tensor:ldl_solve(pivots, b, opts?)` solves
+  `A X = B` from a compact LDL^T factor and its 1-based block pivots; `B`
+  has shape `(*, n, k)` with broadcast batch dimensions, dtype/pivot/shape
+  validation matches `lu_solve`, and `hermitian` is accepted for real inputs;
+- 504 tests cover the new values, reconstructions, `info` diagnostics,
+  rectangular/batched/empty factors, singular handling, gradients for the
+  error-reporting LU factor and solve, and validation errors.
+
+### Changed
+
+- `docs/api.md`, the docs API guards, README status/examples/feature table,
+  roadmap, release notes, and the `0.30.0` rockspec describe or guard the new
+  APIs; C++ changes are limited to five shim entry points plus their header
+  and FFI declarations.
+
 ## [0.29.0] — 2026-11-23
 
 ### Added

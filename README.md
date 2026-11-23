@@ -262,6 +262,23 @@ print(torch.linalg.norm(a, 2))               -- spectral norm
 print(torch.linalg.matrix_norm(a, "nuc"))    -- nuclear norm
 ```
 
+The 0.30 linalg additions cover error-reporting factorizations and symmetric
+indefinite systems. `lu_factor_ex` returns the packed LU, 1-based pivots, and
+an int32 `info`; `solve_ex` returns the solution and `info`; `ldl_factor` and
+`ldl_factor_ex` expose compact LDL^T factors with 1-based block pivots; and
+`ldl_solve` reuses them. The LU factor and solve forms carry autograd, while
+the LDL factorization and solve are value-only on the CPU backend:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local lu, lpiv, linfo = a:lu_factor_ex()
+local ld, dpiv, dinfo = a:ldl_factor_ex()
+local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
+print(linfo:item(), dinfo:item())             -- 0, 0
+print(lu:lu_solve(lpiv, b):totable())         -- {{-0.125}, {0.75}}
+print(torch.linalg.ldl_solve(ld, dpiv, b):totable())  -- same solution
+```
+
 ## Profiling
 
 `torch.profiler` optionally records per-tensor-method call counts and CPU time,
@@ -278,9 +295,13 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.29.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.30.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **493 tests**. The 0.29
+> first-order fused backward, fused reductions, and **504 tests**. The 0.30
+> additions are `torch.linalg.lu_factor_ex`, `torch.linalg.solve_ex`,
+> `torch.linalg.ldl_factor`, `torch.linalg.ldl_factor_ex`, and
+> `torch.linalg.ldl_solve`, with error-reporting `info` tensors, compact
+> LDL^T factors, real-valued validation, tests, and docs. The 0.29
 > additions are `torch.linalg.eigh`/`eigvalsh`, `torch.linalg.cholesky_ex`,
 > `torch.linalg.inv_ex`, the `torch.linalg.norm` dispatcher, and batched
 > `torch.linalg.matrix_norm` with dimension-pair/keepdim support and the
@@ -432,7 +453,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Dtypes | float32/64/16, int8/16/32/64, uint8, bool; Torch7 typed constructors |
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_triangular`, `lu`, `lu_factor`, `lu_solve`, `lu_unpack`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_ex`, `solve_triangular`, `lu`, `lu_factor`, `lu_factor_ex`, `lu_solve`, `lu_unpack`, `ldl_factor`, `ldl_factor_ex`, `ldl_solve`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

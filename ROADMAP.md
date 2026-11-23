@@ -64,6 +64,9 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
   `householder_product` real-valued `linalg.*` bindings
 - [x] `eigh`/`eigvalsh`, `cholesky_ex`, `inv_ex`, `norm`, and batched
   `matrix_norm` with dimension-pair/keepdim support and the nuclear norm
+- [x] `lu_factor_ex`/`solve_ex` error-reporting solves and
+  `ldl_factor`/`ldl_factor_ex`/`ldl_solve` compact symmetric-indefinite
+  factorization
 - [ ] complex `eig`/`eigvals` and remaining `linalg.*` bindings
 - [x] Random: `normal_`, `exponential_`, `bernoulli_`, `uniform_`, `multinomial`
 - [ ] More distributions: `poisson`, `geometric`, `cauchy`, tensor-weighted

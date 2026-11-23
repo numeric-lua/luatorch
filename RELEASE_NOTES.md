@@ -1,3 +1,39 @@
+# luatorch 0.30.0
+
+- five real-valued `torch.linalg` gaps are covered:
+  `lu_factor_ex`, `solve_ex`, `ldl_factor`, `ldl_factor_ex`, and
+  `ldl_solve`;
+- `lu_factor_ex` returns the compact packed LU, int32 1-based pivots, and an
+  int32 `info` tensor. `check_errors` defaults to false, so singular batches
+  are reported instead of raising; `{ check_errors = true }` raises, and the
+  unpivoted CPU path is rejected explicitly. Square, rectangular, batched,
+  and empty float32/float64 inputs are supported and the factor is
+  differentiable;
+- `solve_ex` returns the solution and an int32 `info` tensor. `left`
+  defaults to true and `check_errors` to false; vector and matrix right-hand
+  sides, batch broadcasting, and autograd match the ordinary solve;
+- `ldl_factor` exposes compact LDL^T factors through ATen's sytrf path. `LD`
+  has the input shape and int32 1-based block pivots have shape `(*, n)`;
+  real symmetric square, batched, and empty float32/float64 inputs are
+  supported, `hermitian` is accepted, and singular matrices raise;
+- `ldl_factor_ex` returns `(LD, pivots, info)` and reports singular batches
+  through `info` by default. libtorch 2.5 turns the sytrf positive-info code
+  into an internal assertion, so the shim checks `info` itself and raises a
+  stable message only when `check_errors=true`;
+- `ldl_solve` solves `A X = B` from a compact LDL^T factor. `B` has shape
+  `(*, n, k)` with broadcast batch dimensions, pivots are validated as int32
+  1-based block indices, and dtype/shape errors are reported in Lua. The LDL
+  factorization and solve are value-only because ATen does not implement
+  their derivatives;
+- 504 tests cover known values, reconstruction identities, rectangular,
+  batched, and empty factors, singular `info` diagnostics, autograd for the
+  error-reporting LU factor/solve pair, and validation errors;
+  `./scripts/test.sh` is green;
+- docs, docs guards, README status/examples/feature table, roadmap, CHANGELOG,
+  and the `0.30.0` rockspec are updated. C++ changes are limited to five shim
+  entry points plus their header and FFI declarations; no timing gate was
+  added.
+
 # luatorch 0.29.0
 
 - five real-valued `torch.linalg` gaps are covered: `eigh`/`eigvalsh`,
