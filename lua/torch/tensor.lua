@@ -2016,6 +2016,53 @@ function Tensor:ldl_factor(opts)
   return wrap(ld_pointer[0]), wrap(pivots_pointer[0])
 end
 
+local ldl_factor_ex_options = {
+  hermitian = true,
+  check_errors = true,
+}
+
+-- Error-reporting LDL^T factorization. Returns the compact `LD` factor, int32
+-- 1-based `pivots`, and an int32 `info` tensor whose entries are zero on
+-- success or positive when the corresponding batch element is singular.
+-- `hermitian` defaults to false and `check_errors` defaults to false, matching
+-- torch.linalg.ldl_factor_ex. Float32/float64 square, batched, and empty
+-- inputs are accepted, and the factorization has no implemented derivative.
+function Tensor:ldl_factor_ex(opts)
+  if self:dim() < 2 then
+    error("ldl_factor_ex expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("ldl_factor_ex expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("ldl_factor_ex supports float32 and float64 tensors", 3)
+  end
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    error("ldl_factor_ex options must be a table", 3)
+  end
+  for name in pairs(opts) do
+    if not ldl_factor_ex_options[name] then
+      error("ldl_factor_ex got unknown option '" .. tostring(name) .. "'", 3)
+    end
+  end
+  for _, name in ipairs({ "hermitian", "check_errors" }) do
+    if opts[name] ~= nil and type(opts[name]) ~= "boolean" then
+      error("ldl_factor_ex " .. name .. " must be a boolean", 3)
+    end
+  end
+  local ld_pointer = ffi.new("lt_tensor*[1]")
+  local pivots_pointer = ffi.new("lt_tensor*[1]")
+  local info_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_linalg_ldl_factor_ex(self.h,
+    opts.hermitian == true and 1 or 0,
+    opts.check_errors == true and 1 or 0, ld_pointer, pivots_pointer,
+    info_pointer))
+  return wrap(ld_pointer[0]), wrap(pivots_pointer[0]), wrap(info_pointer[0])
+end
+
 local pinv_options = {
   atol = true,
   rtol = true,

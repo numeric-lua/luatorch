@@ -341,6 +341,7 @@ a:lu_factor_ex(opts?)  -- packed LU, pivots, plus int32 info; opts.pivot/check_e
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
 a:lu_unpack(pivots, opts?)    -- unpack packed LU into P, L, U
 a:ldl_factor(opts?)    -- compact LDL^T factor and 1-based block pivots
+a:ldl_factor_ex(opts?) -- factor, pivots, plus int32 info; opts.hermitian/check_errors
 a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
 a:matrix_exp()         -- matrix exponential of square/batched matrices
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
@@ -365,6 +366,7 @@ torch.linalg.lu(a)       torch.linalg.lu_factor(a)
 torch.linalg.lu_factor_ex(a, opts?)
 torch.linalg.lu_solve(lu, pivots, b, opts?)  torch.linalg.matrix_power(a, n)
 torch.linalg.ldl_factor(a, opts?)  -- compact LDL^T factor
+torch.linalg.ldl_factor_ex(a, opts?)  -- factor plus int32 info
 torch.lu_unpack(lu, pivots, opts?)
 torch.diagonal(a, offset?, dim1?, dim2?)
 torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
@@ -619,6 +621,21 @@ local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
 local ld, pivots = torch.linalg.ldl_factor(a)
 print(ld:totable())     -- {{4, 0}, {0.5, 2}}
 print(pivots:totable()) -- {1, 2}
+```
+
+`ldl_factor_ex` is the error-reporting form of `ldl_factor`. It returns
+`(LD, pivots, info)` where the int32 `info` tensor is zero on success and
+positive when the corresponding batch element is singular. `hermitian`
+defaults to false and `check_errors` defaults to false, so a singular matrix
+is returned with a positive `info` instead of raising; pass
+`{ check_errors = true }` to raise. The `LD` and `pivots` outputs match
+`ldl_factor` for nonsingular inputs, and batches and empty matrices are
+supported:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local ld, pivots, info = torch.linalg.ldl_factor_ex(a)
+print(info:item())                    -- 0
 ```
 
 `pinv` computes the Moore-Penrose pseudoinverse through ATen's SVD-based

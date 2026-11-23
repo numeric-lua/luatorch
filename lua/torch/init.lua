@@ -935,6 +935,12 @@ torch.linalg = {
     end
     return a:ldl_factor(opts)
   end,
+  ldl_factor_ex = function(a, opts)
+    if not Tensor.is_tensor(a) then
+      error("ldl_factor_ex expects a tensor", 3)
+    end
+    return a:ldl_factor_ex(opts)
+  end,
   pinv = function(a, opts) return a:pinv(opts) end,
   matrix_exp = function(a) return a:matrix_exp() end,
   matrix_power = function(a, n) return a:matrix_power(n) end,

@@ -2331,6 +2331,32 @@ int lt_linalg_ldl_factor(lt_tensor* a, int hermitian,
   LT_CATCH_INT
 }
 
+int lt_linalg_ldl_factor_ex(lt_tensor* a, int hermitian, int check_errors,
+                            lt_tensor** LD, lt_tensor** pivots,
+                            lt_tensor** info) {
+  try {
+    clear_error();
+    if (LD == nullptr || pivots == nullptr || info == nullptr) {
+      throw std::runtime_error("ldl_factor_ex: null output pointer");
+    }
+    // See lt_linalg_ldl_factor: ATen's check_errors path maps the sytrf
+    // positive info to an internal assertion, so check it ourselves.
+    auto result = at::linalg_ldl_factor_ex(
+        a->t, hermitian != 0, /*check_errors=*/false);
+    const at::Tensor& info_tensor = std::get<2>(result);
+    if (check_errors != 0 && info_tensor.numel() > 0 &&
+        info_tensor.ne(0).any().item<bool>()) {
+      throw std::runtime_error(
+          "ldl_factor_ex: the matrix is singular (positive info)");
+    }
+    *LD = wrap(std::get<0>(result));
+    *pivots = wrap(std::get<1>(result));
+    *info = wrap(info_tensor);
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 lt_tensor* lt_linalg_pinv(lt_tensor* a, double atol, double rtol,
                           int has_atol, int has_rtol) {
   try {
