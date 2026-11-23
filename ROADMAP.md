@@ -60,6 +60,8 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
 - [x] `pinv` SVD-based pseudoinverse for rank-deficient and batched matrices
 - [x] `matrix_exp` scaling-and-squaring matrix exponential with autograd
 - [x] `diagonal`, `vander`, `cross`, and `multi_dot` real-valued helpers
+- [x] `svdvals`, `vecdot`, `tensorinv`, `tensorsolve`, and
+  `householder_product` real-valued `linalg.*` bindings
 - [ ] `eig`, remaining `linalg.*` bindings
 - [x] Random: `normal_`, `exponential_`, `bernoulli_`, `uniform_`, `multinomial`
 - [ ] More distributions: `poisson`, `geometric`, `cauchy`, tensor-weighted

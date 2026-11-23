@@ -3,6 +3,46 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.28.0] — 2026-11-23
+
+### Added
+
+- `torch.linalg.svdvals` / `Tensor:svdvals()` returns the descending singular
+  values of a matrix or batch through the existing real SVD path, with shape
+  `(*, min(m, n))`, float32/float64 validation, and autograd through the
+  values;
+- `torch.linalg.vecdot` / `Tensor:vecdot(other, dim?)` computes a broadcast
+  vector dot product along one dimension, resolving `dim` against the
+  broadcast rank, accepting float16/float32/float64, and differentiating
+  through both inputs;
+- `torch.linalg.tensorinv` / `Tensor:tensorinv(ind?)` groups the first `ind`
+  dimensions of a tensor into rows and the rest into columns, inverts the
+  square reshaping, and returns the trailing dimensions first; supports empty
+  and grouped shapes, real dtypes, and autograd;
+- `torch.linalg.tensorsolve` / `Tensor:tensorsolve(b, dims?)` solves
+  `tensordot(A, X, X:dim()) = B` for `X`, optionally moving listed dimensions
+  of `A` to the end first; supports any `B` shape with the right number of
+  elements, empty systems, and gradients with respect to both operands;
+- `torch.linalg.householder_product` / `Tensor:householder_product(tau)`
+  reconstructs the first `n` columns of a product of Householder reflectors
+  from compact `(A, tau)` data, backed by a minimal
+  `at::linalg_householder_product` native entry point; validates rank, batch
+  shapes, `k <= n`, `m >= n`, and float32/float64 dtype parity, and supports
+  batches, empty shapes, and autograd;
+- a new `tests/test_linalg_api.lua` file with seventeen tests covering
+  values, reconstruction, grouped shapes, batches, empty inputs,
+  central-difference gradients, dtype behavior, and validation errors; the
+  suite is now **474 tests**.
+
+### Changed
+
+- `docs/api.md` describes the five new APIs, their shapes, dtype rules,
+  defaults, and autograd behavior; the docs test guards all five aliases;
+- README status, examples, and the feature table, the roadmap, changelog,
+  release notes, and the `0.28.0` rockspec name the release. C++ changes are
+  limited to the single `lt_linalg_householder_product` entry point and its
+  header/FFI declaration.
+
 ## [0.27.0] — 2026-11-22
 
 ### Added

@@ -1,3 +1,31 @@
+# luatorch 0.28.0
+
+- five more real-valued `torch.linalg` APIs are available:
+  `torch.linalg.svdvals`, `torch.linalg.vecdot`, `torch.linalg.tensorinv`,
+  `torch.linalg.tensorsolve`, and `torch.linalg.householder_product`, each with
+  its `Tensor` method and docs/API guards;
+- `svdvals` returns descending singular values with shape `(*, min(m, n))`
+  through `svd(full_matrices=false)` and differentiates through the values;
+- `vecdot` reduces an elementwise product along a dimension with NumPy-style
+  broadcasting; the reduction dimension is resolved against the broadcast
+  rank, so lower-rank operands work, and float16/float32/float64 are accepted;
+- `tensorinv` groups the first `ind` dimensions into a square matrix, inverts
+  it, and returns trailing dimensions first; `tensorsolve` solves
+  `tensordot(A, X, X:dim()) = B`, optionally moving `dims` of `A` to the end
+  first. Both support empty/grouped shapes, matching float32/float64 dtypes,
+  and autograd;
+- `householder_product` reconstructs `Q` from compact Householder reflectors
+  through a minimal native `at::linalg_householder_product` entry point; it
+  validates `m >= n`, `k <= n`, batch shapes, and dtype parity, and supports
+  batches, empty shapes, and gradients for `A` and `tau`;
+- seventeen new tests in `tests/test_linalg_api.lua` cover known values,
+  reconstruction identities, grouped and batched shapes, empty inputs,
+  central-difference gradients, dtype behavior, and validation errors; the
+  suite is now **474 tests** and `./scripts/test.sh` is green;
+- docs, README status/examples/feature table, roadmap, CHANGELOG, and the
+  `0.28.0` rockspec are updated. C++ changes are limited to one shim entry
+  point plus its header and FFI declaration; no timing gate was added.
+
 # luatorch 0.27.0
 
 - five real-valued linear-algebra helpers are now available, implemented in
