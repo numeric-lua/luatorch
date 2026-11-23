@@ -92,3 +92,108 @@ test("svdvals validates ranks and dtypes", function()
     torch.linalg.svdvals(torch.ones(2, 2, { dtype = torch.bool }))
   end, "float32 and float64")
 end)
+
+test("vecdot reduces a dimension with broadcasting", function()
+  local x = float_matrix({ { 1, 2 }, { 3, 4 } })
+  local y = float_matrix({ { 5, 6 }, { 7, 8 } })
+  assert_tensor(torch.linalg.vecdot(x, y), { 17, 53 })
+  assert_tensor(x:vecdot(y, 1), { 26, 44 })
+  assert_tensor(x:vecdot(y, -2), { 26, 44 })
+  assert_shape(torch.linalg.vecdot(x, y, 1), { 2 })
+
+  local vector = torch.tensor({ 5, 6 }, { dtype = torch.float64 })
+  assert_tensor(torch.linalg.vecdot(x, vector), { 17, 39 })
+  assert_tensor(torch.linalg.vecdot(vector, x), { 17, 39 })
+
+  local third = torch.tensor({
+    { { 1, 2 }, { 3, 4 } },
+    { { 5, 6 }, { 7, 8 } },
+  }, { dtype = torch.float64 })
+  local weights = float_matrix({ { 2, -1 } })
+  assert_shape(third:vecdot(weights, 3), { 2, 2 })
+  assert_tensor(third:vecdot(weights, 3), {
+    { 0, 2 },
+    { 4, 6 },
+  })
+  assert_tensor(third:vecdot(weights, 2), { { 8, -6 }, { 24, -14 } })
+
+  local first = torch.tensor({ 1, 2 }, { dtype = torch.float64 })
+  local second = torch.tensor({ 3, 4 }, { dtype = torch.float64 })
+  local scalar = torch.linalg.vecdot(first, second)
+  assert_shape(scalar, {})
+  assert_near(scalar:item(), 11, 1e-12)
+end)
+
+test("vecdot handles empty vectors, dtypes, and gradients", function()
+  local empty = torch.zeros(2, 0, { dtype = torch.float64 })
+  assert_tensor(empty:vecdot(empty), { 0, 0 })
+
+  local x = torch.ones(2, 3)
+  local y = torch.ones(2, 3)
+  assert_dtype(x:vecdot(y), "float32")
+  assert_dtype(x:half():vecdot(y:half()), "float16")
+  assert_dtype(x:double():vecdot(y:double()), "float64")
+
+  local values_x = { { 1.2, -0.4 }, { 0.5, 1.1 } }
+  local values_y = { { -0.3, 0.8 }, { 2.0, -1.2 } }
+  local left = torch.tensor(values_x, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local right = torch.tensor(values_y, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local loss = torch.linalg.vecdot(left, right):sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(side, i, j, delta)
+    local copy = { { values_x[1][1], values_x[1][2] },
+      { values_x[2][1], values_x[2][2] } }
+    local other = { { values_y[1][1], values_y[1][2] },
+      { values_y[2][1], values_y[2][2] } }
+    local target = side == "x" and copy or other
+    target[i][j] = target[i][j] + delta
+    local a = torch.tensor(copy, { dtype = torch.float64 })
+    local b = torch.tensor(other, { dtype = torch.float64 })
+    return torch.linalg.vecdot(a, b):sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      assert_near(left:grad():get(i, j),
+        (numeric("x", i, j, eps) - numeric("x", i, j, -eps)) / (2 * eps),
+        1e-5)
+      assert_near(right:grad():get(i, j),
+        (numeric("y", i, j, eps) - numeric("y", i, j, -eps)) / (2 * eps),
+        1e-5)
+    end
+  end
+end)
+
+test("vecdot validates dtypes, dimensions, and broadcasting", function()
+  local x = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_error(function()
+    torch.linalg.vecdot(x, { 1, 2 })
+  end, "two tensors")
+  assert_error(function()
+    x:vecdot(torch.ones(2, 2))
+  end, "same dtype")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):vecdot(
+      torch.ones(2, 2, { dtype = torch.int64 }))
+  end, "float16, float32, and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):vecdot(
+      torch.ones(2, 2, { dtype = torch.bool }))
+  end, "float16, float32, and float64")
+  assert_error(function()
+    torch.linalg.vecdot(torch.tensor(1), torch.tensor(2))
+  end, "at least one dimension")
+  assert_error(function()
+    x:vecdot(x, 3)
+  end, "dimension out of range")
+  assert_error(function()
+    x:vecdot(float_matrix({ { 1, 2, 3 }, { 4, 5, 6 } }))
+  end, "size")
+end)

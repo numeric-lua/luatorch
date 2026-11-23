@@ -770,6 +770,12 @@ torch.linalg = {
     end
     return a:cross(b, dim)
   end,
+  vecdot = function(x, y, dim)
+    if not Tensor.is_tensor(x) or not Tensor.is_tensor(y) then
+      error("vecdot expects two tensors", 3)
+    end
+    return x:vecdot(y, dim)
+  end,
   vector_norm = function(a, ord, dim, keepdim)
     if not Tensor.is_tensor(a) then
       error("vector_norm expects a tensor", 3)

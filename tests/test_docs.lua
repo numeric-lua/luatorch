@@ -62,7 +62,7 @@ test("documented linalg aliases exist", function()
       "solve_triangular", "lstsq", "cholesky", "svd", "qr", "lu",
       "lu_factor", "lu_solve", "pinv", "matrix_exp", "matrix_power",
       "svdvals", "matrix_norm", "cond", "matrix_rank", "vector_norm", "diagonal",
-      "vander", "cross", "multi_dot" }) do
+      "vander", "cross", "vecdot", "multi_dot" }) do
     assert_true(api:find("torch.linalg." .. name, 1, true) ~= nil,
       "docs/api.md does not mention torch.linalg." .. name)
     assert_eq(type(torch.linalg[name]), "function",

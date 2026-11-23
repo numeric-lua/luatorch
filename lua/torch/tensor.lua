@@ -1767,6 +1767,29 @@ function Tensor:cross(other, dim)
   }, axis - 1)
 end
 
+-- Dot product of two batches of vectors along `dim`, with NumPy-style
+-- broadcasting. The reduction dimension is resolved against the broadcast
+-- rank, so a lower-rank operand is broadcast before the product is reduced.
+function Tensor:vecdot(other, dim)
+  if not is_tensor(other) then
+    error("vecdot expects a tensor", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error("vecdot supports float16, float32, and float64 tensors", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("vecdot expects both inputs to have the same dtype", 3)
+  end
+  local rank = math.max(self:dim(), other:dim())
+  if rank == 0 then
+    error("vecdot expects tensors with at least one dimension", 3)
+  end
+  dim = dim == nil and -1 or dim
+  local axis = dimension_argument(dim, rank, "vecdot")
+  return (self * other):sum(axis)
+end
+
 -- Diagonal over two dimensions. The selected diagonal is appended as the last
 -- output dimension, and all other dimensions keep their order, matching
 -- torch.diagonal. The implementation permutes the two target dimensions to the

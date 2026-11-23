@@ -337,6 +337,7 @@ a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 a:diagonal(offset?, dim1?, dim2?)  -- diagonal over two dimensions
 a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
 a:cross(other, dim?)               -- 3-vector cross product along one dimension
+a:vecdot(other, dim?)              -- batched vector dot along one dimension
 
 torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
@@ -352,6 +353,7 @@ torch.cross(a, b, dim?)                   -- default dim is the last dimension
 torch.linalg.diagonal(a, offset?, dim1?, dim2?)  -- last two dims by default
 torch.linalg.vander(x, N?)                -- any rank, increasing by default
 torch.linalg.cross(a, b, dim?)            -- last dimension by default
+torch.linalg.vecdot(x, y, dim?)           -- last dimension by default
 torch.linalg.multi_dot({a, b, c, ...})    -- optimal chain product
 torch.linalg.pinv(a, opts?)
 torch.linalg.matrix_exp(a)
@@ -546,6 +548,20 @@ defaults to the last dimension. The inputs must have the same rank, the same
 dtype, and length 3 along `dim`; their other dimensions broadcast. Integer and
 floating dtypes are supported, bool is rejected, and autograd flows to both
 inputs. `torch.cross` and `torch.linalg.cross` are aliases.
+
+`vecdot` computes the dot product of two batches of vectors along `dim`.
+The reduction dimension is resolved against the broadcast rank, so the inputs
+follow ordinary NumPy broadcasting before the elementwise product is summed;
+the result has the broadcast shape with `dim` removed. Inputs must share one
+float16/float32/float64 dtype; integer and bool inputs are rejected. The
+operation is built from `mul` and `sum`, so autograd flows to both inputs:
+
+```lua
+local x = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
+local y = torch.tensor({{5, 6}, {7, 8}}, {dtype = torch.float64})
+print(torch.linalg.vecdot(x, y):totable())   -- {17, 53}
+print(x:vecdot(y, 1):totable())              -- {23, 34}
+```
 
 `torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with a
 dynamic-programming parenthesization that minimizes scalar multiplications.
