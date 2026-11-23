@@ -197,3 +197,109 @@ test("vecdot validates dtypes, dimensions, and broadcasting", function()
     x:vecdot(float_matrix({ { 1, 2, 3 }, { 4, 5, 6 } }))
   end, "size")
 end)
+
+test("tensorinv inverts tensordot groupings", function()
+  local matrix = float_matrix({ { 4, 7 }, { 2, 6 } })
+  assert_tensor(matrix:tensorinv(1), matrix:inverse():totable(), 1e-12)
+  assert_tensor(torch.linalg.tensorinv(matrix, 1):
+    matmul(matrix), { { 1, 0 }, { 0, 1 } }, 1e-12)
+
+  local grouped = torch.eye(24, { dtype = torch.float64 })
+    :reshape(6, 4, 2, 3, 4)
+  local inverse = torch.linalg.tensorinv(grouped)
+  assert_shape(inverse, { 2, 3, 4, 6, 4 })
+  local product = grouped:reshape(24, 24):matmul(inverse:reshape(24, 24))
+  assert_tensor(product, torch.eye(24, {
+    dtype = torch.float64,
+  }):totable(), 1e-10)
+
+  local rectangular = torch.eye(6, { dtype = torch.float64 })
+    :reshape(2, 3, 6)
+  local right = torch.linalg.tensorinv(rectangular, 2)
+  assert_shape(right, { 6, 2, 3 })
+  assert_tensor(rectangular:reshape(6, 6):matmul(right:reshape(6, 6)),
+    torch.eye(6, { dtype = torch.float64 }):totable(), 1e-10)
+
+  local shaped = torch.tensor({
+    { { 2, 0, 0, 0 }, { 0, 4, 0, 0 } },
+    { { 0, 0, 1, 0 }, { 0, 0, 0, 3 } },
+  }, { dtype = torch.float64 })
+  assert_shape(torch.linalg.tensorinv(shaped, 2), { 4, 2, 2 })
+  assert_shape(torch.linalg.tensorinv(torch.zeros(0, 0, {
+    dtype = torch.float64,
+  }), 1), { 0, 0 })
+  assert_dtype(torch.linalg.tensorinv(torch.eye(2), 1), "float32")
+end)
+
+test("tensorinv gradients match central differences", function()
+  local values = {
+    { { 2.0, 0.3, 0.1, 0.0 }, { 0.1, 1.5, 0.2, 0.0 } },
+    { { 0.2, -0.1, 2.2, 0.4 }, { 0.4, 0.2, 0.1, 1.8 } },
+  }
+  local tensor = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local weights = torch.tensor({
+    { { 1.0, -2.0 }, { 0.5, 3.0 } },
+    { { -1.5, 0.25 }, { 2.0, -0.5 } },
+    { { 0.75, 1.0 }, { -0.25, 2.5 } },
+    { { -1.0, 0.5 }, { 1.5, -3.0 } },
+  }, { dtype = torch.float64 })
+  local loss = (tensor:tensorinv(2) * weights):sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(i, j, k, delta)
+    local copy = {
+      { { values[1][1][1], values[1][1][2], values[1][1][3],
+        values[1][1][4] },
+        { values[1][2][1], values[1][2][2], values[1][2][3],
+          values[1][2][4] } },
+      { { values[2][1][1], values[2][1][2], values[2][1][3],
+        values[2][1][4] },
+        { values[2][2][1], values[2][2][2], values[2][2][3],
+          values[2][2][4] } },
+    }
+    copy[i][j][k] = copy[i][j][k] + delta
+    local perturbed = torch.tensor(copy, { dtype = torch.float64 })
+    return (perturbed:tensorinv(2) * weights):sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      for k = 1, 4 do
+        assert_near(tensor:grad():get(i, j, k),
+          (numeric(i, j, k, eps) - numeric(i, j, k, -eps)) / (2 * eps),
+          1e-5)
+      end
+    end
+  end
+end)
+
+test("tensorinv validates ind, shape products, and dtypes", function()
+  local matrix = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_error(function()
+    torch.linalg.tensorinv(torch.tensor(1, { dtype = torch.float64 }))
+  end, "at least one dimension")
+  assert_error(function()
+    matrix:tensorinv(0)
+  end, "in 1..2")
+  assert_error(function()
+    matrix:tensorinv(3)
+  end, "in 1..2")
+  assert_error(function()
+    matrix:tensorinv(1.5)
+  end, "integer")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):tensorinv(1)
+  end, "got 2 and 3")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):tensorinv(1)
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):tensorinv(1)
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):tensorinv(1)
+  end, "float32 and float64")
+end)

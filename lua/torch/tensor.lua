@@ -1306,6 +1306,42 @@ function Tensor:inverse()
   return wrap(lib.lt_linalg_inv(self.h))
 end
 
+-- Multiplicative inverse of tensordot. The first `ind` dimensions are grouped
+-- into m rows and the remaining dimensions into n columns; the reshaped matrix
+-- must be square. The inverse is reshaped to trailing dimensions first and
+-- grouped dimensions last, matching torch.linalg.tensorinv.
+function Tensor:tensorinv(ind)
+  if self:dim() < 1 then
+    error("tensorinv expects a tensor with at least one dimension", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("tensorinv supports float32 and float64 tensors", 3)
+  end
+  ind = ind == nil and 2 or ind
+  if type(ind) ~= "number" or ind ~= ind or ind % 1 ~= 0 or
+      ind == math.huge or ind == -math.huge then
+    error("tensorinv ind must be an integer", 3)
+  end
+  ind = math.floor(ind)
+  if ind < 1 or ind > self:dim() then
+    error(string.format("tensorinv ind must be in 1..%d", self:dim()), 3)
+  end
+  local shape = self:sizes()
+  local m, n = 1, 1
+  for i = 1, ind do m = m * shape[i] end
+  for i = ind + 1, #shape do n = n * shape[i] end
+  if m ~= n then
+    error(string.format(
+      "tensorinv expects prod(shape[1:%d]) == prod(shape[%d:]), got %d and %d",
+      ind, ind + 1, m, n), 3)
+  end
+  local output_shape = {}
+  for i = ind + 1, #shape do output_shape[#output_shape + 1] = shape[i] end
+  for i = 1, ind do output_shape[#output_shape + 1] = shape[i] end
+  return self:reshape(m, n):inverse():reshape(output_shape)
+end
+
 function Tensor:det()
   return wrap(lib.lt_linalg_det(self.h))
 end

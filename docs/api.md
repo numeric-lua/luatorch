@@ -318,6 +318,7 @@ a:baddbmm(m1, m2, beta?, alpha?)  -- batched addmm
 
 ```lua
 a:inverse()
+a:tensorinv(ind?)   -- inverse of tensordot over the first ind dimensions
 a:det()
 a:slogdet()         -- returns sign, logabsdet; batched and differentiable
 a:solve(b)          -- solve a x = b (b may be a vector or matrix)
@@ -339,7 +340,8 @@ a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
 a:cross(other, dim?)               -- 3-vector cross product along one dimension
 a:vecdot(other, dim?)              -- batched vector dot along one dimension
 
-torch.linalg.inv(a)      torch.linalg.det(a)      torch.linalg.slogdet(a)
+torch.linalg.inv(a)      torch.linalg.tensorinv(a, ind?)
+torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.svdvals(a)  -- descending singular values
 torch.linalg.solve_triangular(a, b, opts)
@@ -357,6 +359,21 @@ torch.linalg.vecdot(x, y, dim?)           -- last dimension by default
 torch.linalg.multi_dot({a, b, c, ...})    -- optimal chain product
 torch.linalg.pinv(a, opts?)
 torch.linalg.matrix_exp(a)
+```
+
+`tensorinv` inverts a tensor with respect to `torch.tensordot`. Its first
+`ind` dimensions (default 2) are grouped into `m` rows and the remaining
+dimensions into `n` columns; the products must be equal, so the reshaped
+`m x n` matrix is square and invertible. The result has the trailing
+dimensions first and the grouped dimensions last:
+`X:sizes() == A:sizes()[ind + 1:] + A:sizes()[:ind]`. In particular, a 2-D
+matrix with `ind = 1` is an ordinary inverse. Only real float32/float64 inputs
+are accepted, and autograd flows through the underlying inverse:
+
+```lua
+local a = torch.eye(12, {dtype = torch.float64}):reshape(3, 4, 2, 2, 3)
+local inv = torch.linalg.tensorinv(a, 2)
+print(inv:sizes())                    -- {2, 2, 3, 3, 4}
 ```
 
 `svdvals` returns only the singular values of a matrix or a batch of
