@@ -1058,3 +1058,93 @@ test("matrix_norm preserves legacy results and validates inputs", function()
     torch.linalg.matrix_norm(torch.ones(2, 2, { dtype = torch.int64 }), "nuc")
   end, "spectral and nuclear")
 end)
+
+test("torch.linalg.norm dispatches vectors and matrices", function()
+  local matrix = torch.arange(1, 7, 1, {
+    dtype = torch.float64,
+  }):reshape(2, 3)
+  assert_near(torch.linalg.norm(matrix):item(), math.sqrt(91), 1e-12)
+  assert_near(torch.linalg.norm(matrix, 2):item(),
+    torch.linalg.matrix_norm(matrix, 2), 1e-12)
+  assert_near(torch.linalg.norm(matrix, 1):item(), 9, 1e-12)
+  assert_near(torch.linalg.norm(matrix, -1):item(), 5, 1e-12)
+  assert_near(torch.linalg.norm(matrix, math.huge):item(), 15, 1e-12)
+  assert_near(torch.linalg.norm(matrix, -math.huge):item(), 6, 1e-12)
+  assert_near(torch.linalg.norm(matrix, "fro"):item(), math.sqrt(91), 1e-12)
+  assert_near(torch.linalg.norm(matrix, "nuc"):item(),
+    torch.linalg.matrix_norm(matrix, "nuc"), 1e-12)
+
+  assert_tensor(torch.linalg.norm(matrix, nil, 1), {
+    math.sqrt(17), math.sqrt(29), math.sqrt(45),
+  }, 1e-12)
+  assert_tensor(torch.linalg.norm(matrix, nil, 2), {
+    math.sqrt(14), math.sqrt(77),
+  }, 1e-12)
+  assert_near(torch.linalg.norm(matrix, 1, { 1, 2 }):item(), 9, 1e-12)
+  assert_near(torch.linalg.norm(matrix, 2, { 1, 2 }):item(),
+    torch.linalg.matrix_norm(matrix, 2), 1e-12)
+  assert_near(torch.linalg.norm(matrix, "fro", { -2, -1 }):item(),
+    math.sqrt(91), 1e-12)
+  assert_tensor(torch.linalg.norm(matrix, nil, { 2 }), {
+    math.sqrt(14), math.sqrt(77),
+  }, 1e-12)
+
+  assert_shape(torch.linalg.norm(matrix, "fro", { 1, 2 }, true), { 1, 1 })
+  assert_shape(torch.linalg.norm(matrix, nil, 1, true), { 1, 3 })
+  assert_shape(torch.linalg.norm(matrix, nil, nil, true), { 1, 1 })
+  assert_shape(torch.linalg.norm(torch.ones(2, 3, 4), nil, nil, true),
+    { 1, 1, 1 })
+  assert_near(torch.linalg.norm(torch.tensor({ 3, 4 }, {
+    dtype = torch.float64,
+  }), 2):item(), 5, 1e-12)
+  assert_near(torch.linalg.norm(torch.tensor({ { 3, 4 } }, {
+    dtype = torch.float64,
+  }), "fro"):item(), 5, 1e-12)
+end)
+
+test("torch.linalg.norm supports zero, negative, and infinite orders", function()
+  local vector = torch.tensor({ 3, 4 }, { dtype = torch.float64 })
+  assert_near(torch.linalg.norm(vector, 0):item(), 2, 1e-12)
+  assert_near(torch.linalg.norm(vector, -1):item(), 12 / 7, 1e-12)
+  assert_near(torch.linalg.norm(vector, -2):item(), 12 / 5, 1e-12)
+  assert_near(torch.linalg.norm(vector, math.huge):item(), 4, 1e-12)
+  assert_near(torch.linalg.norm(vector, -math.huge):item(), 3, 1e-12)
+
+  local zeros = torch.tensor({ -2, 0, 1 }, { dtype = torch.float64 })
+  assert_near(torch.linalg.norm(zeros, 0):item(), 2, 1e-12)
+  assert_near(torch.linalg.norm(zeros, -math.huge):item(), 0, 1e-12)
+  assert_near(torch.linalg.vector_norm(vector, -1):item(), 12 / 7, 1e-12)
+  assert_shape(torch.linalg.vector_norm(vector, 0, nil, true), { 1 })
+  assert_near(torch.linalg.vector_norm(vector, -math.huge):item(), 3, 1e-12)
+end)
+
+test("torch.linalg.norm validates dispatch and dimensions", function()
+  local matrix = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_error(function()
+    torch.linalg.norm(1)
+  end, "expects a tensor")
+  assert_error(function()
+    torch.linalg.norm(torch.ones(2, 2, 2), 2)
+  end, "1-D or 2-D")
+  assert_error(function()
+    torch.linalg.norm(matrix, nil, { 1, 2, 3 })
+  end, "1- or 2-element table")
+  assert_error(function()
+    torch.linalg.norm(matrix, nil, "rows")
+  end, "integer or a table")
+  assert_error(function()
+    torch.linalg.norm(matrix, nil, 0)
+  end, "out of range")
+  assert_error(function()
+    torch.linalg.norm(matrix, nil, 3)
+  end, "out of range")
+  assert_error(function()
+    torch.linalg.norm(matrix, "fro", 1)
+  end, "ord must be a number")
+  assert_error(function()
+    torch.linalg.norm(matrix, 3, { 1, 2 })
+  end, "matrix_norm supports")
+  assert_error(function()
+    torch.linalg.vector_norm(matrix, "fro")
+  end, "ord must be a number")
+end)

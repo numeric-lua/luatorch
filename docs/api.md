@@ -693,6 +693,26 @@ local b = torch.arange(1, 25, 1, {dtype = torch.float64}):reshape(2, 3, 4)
 print(torch.linalg.matrix_norm(b, 1, 1, 3, true):sizes())  -- {1, 3, 1}
 ```
 
+`torch.linalg.norm(a, ord?, dim?, keepdim?)` is the umbrella dispatcher that
+matches PyTorch's deprecated `linalg.norm` behavior. With no `dim` and no
+`ord` it computes the flattened 2-norm (Frobenius for matrices). With no
+`dim` but an explicit `ord`, the input must be 1-D or 2-D: 1-D uses a vector
+norm and 2-D uses a matrix norm. An integer `dim` always selects a vector
+norm, while a one- or two-element table selects a vector or matrix norm over
+those dimensions. The vector orders `0`, positive and negative finite
+numbers, `math.huge`, and `-math.huge` are supported; matrix orders are those
+of `matrix_norm`. The result is a tensor, and `keepdim` keeps every reduced
+dimension as size one (including a fully flattened norm):
+
+```lua
+local a = torch.arange(1, 7, 1, {dtype = torch.float64}):reshape(2, 3)
+print(torch.linalg.norm(a):item())                 -- 9.5393920141695
+print(torch.linalg.norm(a, 2):item())              -- spectral norm
+print(torch.linalg.norm(a, 1, {1, 2}):item())      -- matrix 1-norm, 9
+print(torch.linalg.norm(a, nil, 1):totable())      -- column 2-norms
+print(torch.linalg.norm(a, "fro", {1, 2}, true):sizes())  -- {1, 1}
+```
+
 `torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with a
 dynamic-programming parenthesization that minimizes scalar multiplications.
 The first and last operands may be 1-D vectors (treated as a row and column
@@ -1019,6 +1039,7 @@ torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
 torch.linalg.matrix_norm(a, ord?, dim1?, dim2?, keepdim?)
                                   -- fro, nuc, 2, -2, 1, -1, inf, -inf
+torch.linalg.norm(a, ord?, dim?, keepdim?)  -- vector/matrix norm dispatcher
 torch.linalg.cond(a, p?)         -- 2, 1, inf, fro
 torch.linalg.matrix_rank(a, tol?)
 torch.linalg.matrix_power(a, n)  -- integer matrix power

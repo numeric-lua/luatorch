@@ -835,6 +835,41 @@ local function matrix_norm_tensor(a, ord, dim1, dim2, keepdim)
   return result
 end
 
+-- Vector norm with the full real-valued order set. Positive orders and +inf
+-- reuse the native reduction; zero counts nonzeros; negative finite orders are
+-- built from abs/pow/sum, and -inf is the minimum absolute value. A missing
+-- dim reduces every dimension, matching the flattening behavior of norm.
+local function vector_norm_tensor(a, ord, dim, keepdim)
+  ord = ord == nil and 2 or ord
+  if type(ord) ~= "number" then
+    error("vector_norm ord must be a number", 3)
+  end
+  local rank = a:dim()
+  local resolved = dim
+  if resolved ~= nil then
+    resolved = linalg_dim(resolved, rank, "vector_norm")
+  end
+
+  local result
+  if ord == 0 then
+    result = a:ne(0):to(a:dtype_id()):sum(resolved, keepdim)
+  elseif ord == math.huge then
+    result = a:abs():max(resolved, keepdim)
+  elseif ord == -math.huge then
+    result = a:abs():min(resolved, keepdim)
+  elseif ord > 0 then
+    result = a:norm(ord, resolved, keepdim)
+  else
+    result = a:abs():pow(ord):sum(resolved, keepdim):pow(1 / ord)
+  end
+  if keepdim and dim == nil then
+    local shape = {}
+    for i = 1, rank do shape[i] = 1 end
+    result = result:reshape(shape)
+  end
+  return result
+end
+
 torch.linalg = {
   inv = function(a) return a:inverse() end,
   inv_ex = function(a, opts)
@@ -914,11 +949,35 @@ torch.linalg = {
     if not Tensor.is_tensor(a) then
       error("vector_norm expects a tensor", 3)
     end
-    ord = ord == nil and 2 or ord
-    if type(ord) ~= "number" then
-      error("vector_norm ord must be a number", 3)
+    return vector_norm_tensor(a, ord, dim, keepdim)
+  end,
+  norm = function(a, ord, dim, keepdim)
+    if not Tensor.is_tensor(a) then
+      error("norm expects a tensor", 3)
     end
-    return a:norm(ord, dim, keepdim)
+    if dim == nil then
+      if ord == nil then
+        return vector_norm_tensor(a, 2, nil, keepdim)
+      end
+      local rank = a:dim()
+      if rank == 1 then
+        return vector_norm_tensor(a, ord, 1, keepdim)
+      elseif rank == 2 then
+        return matrix_norm_tensor(a, ord, 1, 2, keepdim)
+      end
+      error("norm: if dim is not specified but ord is, the input must be " ..
+        "1-D or 2-D", 3)
+    elseif type(dim) == "number" then
+      return vector_norm_tensor(a, ord, dim, keepdim)
+    elseif type(dim) == "table" then
+      if #dim == 1 then
+        return vector_norm_tensor(a, ord, dim[1], keepdim)
+      elseif #dim == 2 then
+        return matrix_norm_tensor(a, ord, dim[1], dim[2], keepdim)
+      end
+      error("norm dim must be an integer or a 1- or 2-element table", 3)
+    end
+    error("norm dim must be an integer or a table of dimensions", 3)
   end,
   cond = function(a, p)
     if not Tensor.is_tensor(a) or a:dim() ~= 2 then
