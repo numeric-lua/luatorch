@@ -2243,6 +2243,14 @@ lt_tensor* lt_linalg_matrix_exp(lt_tensor* a) {
   LT_CATCH_NULL
 }
 
+lt_tensor* lt_linalg_householder_product(lt_tensor* a, lt_tensor* tau) {
+  try {
+    clear_error();
+    return wrap(at::linalg_householder_product(a->t, tau->t));
+  }
+  LT_CATCH_NULL
+}
+
 lt_tensor* lt_mv(lt_tensor* a, lt_tensor* v) {
   try {
     clear_error();

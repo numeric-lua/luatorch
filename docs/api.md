@@ -329,6 +329,7 @@ a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:svd(full_matrices?)  -- returns U, S, Vh
 a:svdvals()            -- descending singular values, shape (*, min(m, n))
 a:qr(mode?)            -- returns Q, R; mode defaults to "reduced"
+a:householder_product(tau)  -- Q from compact Householder reflectors
 a:lu()                 -- pivoted LU; returns P, L, U with A = P L U
 a:lu_factor()          -- packed LU and 1-based pivots; raises if singular
 a:lu_solve(pivots, b, opts?)  -- solve from a packed factorization
@@ -346,6 +347,7 @@ torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.svdvals(a)  -- descending singular values
+torch.linalg.householder_product(a, tau)  -- Q from Householder reflectors
 torch.linalg.solve_triangular(a, b, opts)
 torch.linalg.qr(a)       torch.linalg.lstsq(a, b, opts?)  -- aliases
 torch.linalg.lu(a)       torch.linalg.lu_factor(a)
@@ -392,6 +394,22 @@ local a = torch.eye(16, {dtype = torch.float64}):reshape(2, 2, 2, 2)
 local b = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
 local x = torch.linalg.tensorsolve(a, b)
 print(x:sizes())                      -- {2, 2}
+```
+
+`householder_product` reconstructs the first `n` columns of a product of
+Householder matrices from the compact representation used by LAPACK's `geqrf`:
+a matrix `A` of shape `(*, m, n)` with `m >= n` and a `tau` tensor of shape
+`(*, k)` with `k <= n`. The batch dimensions of `tau` must equal those of `A`,
+the diagonal of `A` is ignored, and each reflector uses an implied leading
+one. The result keeps the shape `(*, m, n)`. Only real float32/float64 inputs
+are accepted and both operands must share the dtype. The operation is backed
+by `at::linalg_householder_product`, so it is differentiable:
+
+```lua
+local a = torch.tensor({{9}, {3}, {4}}, {dtype = torch.float64})
+local tau = torch.tensor({2 / 26}, {dtype = torch.float64})
+print(torch.linalg.householder_product(a, tau):totable())
+-- {{0.9230769230769231}, {-0.2307692307692308}, {-0.3076923076923077}}
 ```
 
 `svdvals` returns only the singular values of a matrix or a batch of

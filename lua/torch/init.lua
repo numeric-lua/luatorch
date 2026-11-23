@@ -745,6 +745,9 @@ torch.linalg = {
   svd = function(a, full_matrices) return a:svd(full_matrices) end,
   svdvals = function(a) return a:svdvals() end,
   qr = function(a, mode) return a:qr(mode) end,
+  householder_product = function(a, tau)
+    return a:householder_product(tau)
+  end,
   lu = function(a) return a:lu() end,
   lu_factor = function(a) return a:lu_factor() end,
   lu_solve = function(lu, pivots, b, opts)

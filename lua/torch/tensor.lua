@@ -1577,6 +1577,46 @@ function Tensor:qr(mode)
   return wrap(q_pointer[0]), wrap(r_pointer[0])
 end
 
+-- Reconstruct the first n columns of a product of Householder reflectors from
+-- the compact representation produced by geqrf. A has shape (*, m, n) with
+-- m >= n, and tau has shape (*, k) with k <= n and exactly A's batch
+-- dimensions. The diagonal of A is ignored and each reflector uses an implied
+-- leading one. Only real float32/float64 are accepted: the CPU LAPACK path
+-- has no half-precision kernel.
+function Tensor:householder_product(tau)
+  if not is_tensor(tau) then
+    error("householder_product expects a tau tensor", 3)
+  end
+  if self:dim() < 2 then
+    error("householder_product expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("householder_product supports float32 and float64 tensors", 3)
+  end
+  if tau:dtype_id() ~= self:dtype_id() then
+    error("householder_product expects tau to match the input dtype", 3)
+  end
+  local m, n = self:size(-2), self:size(-1)
+  if m < n then
+    error("householder_product expects input.shape[-2] >= input.shape[-1]", 3)
+  end
+  if tau:dim() ~= self:dim() - 1 then
+    error("householder_product expects tau to have one dimension less than " ..
+      "the input", 3)
+  end
+  for dim = 1, self:dim() - 2 do
+    if tau:size(dim) ~= self:size(dim) then
+      error("householder_product expects tau batch dimensions to equal " ..
+        "input batch dimensions", 3)
+    end
+  end
+  if tau:size(-1) > n then
+    error("householder_product expects tau:size(-1) <= input.shape[-1]", 3)
+  end
+  return wrap(lib.lt_linalg_householder_product(self.h, tau.h))
+end
+
 -- LU decomposition with partial pivoting. Returns P, L, U such that
 -- A = P L U for square and rectangular matrices, with an optional batch
 -- dimension. CPU LAPACK only implements the pivoted float32/float64 path:

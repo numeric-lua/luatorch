@@ -461,3 +461,168 @@ test("tensorsolve validates shapes, dims, and dtypes", function()
     }), torch.tensor(1.0, { dtype = torch.float64 }))
   end, "at least one dimension")
 end)
+
+test("householder_product reconstructs reflectors", function()
+  local column = float_matrix({ { 9 }, { 3 }, { 4 } })
+  local tau = torch.tensor({ 2 / 26 }, { dtype = torch.float64 })
+  assert_tensor(torch.linalg.householder_product(column, tau), {
+    { 12 / 13 },
+    { -3 / 13 },
+    { -4 / 13 },
+  }, 1e-12)
+
+  local a = float_matrix({
+    { 7, 8, 9 },
+    { 0.6, 9, 1 },
+    { 0.8, 0.2, 5 },
+  })
+  local values = torch.tensor({
+    2 / (0.6 ^ 2 + 0.8 ^ 2),
+    2 / (1 + 0.2 ^ 2),
+    0.5,
+  }, { dtype = torch.float64 })
+  local q = torch.linalg.householder_product(a, values)
+  assert_shape(q, { 3, 3 })
+
+  local identity = torch.eye(3, { dtype = torch.float64 })
+  local b1 = torch.tensor({ 1, 0.6, 0.8 }, { dtype = torch.float64 })
+  local b2 = torch.tensor({ 0, 1, 0.2 }, { dtype = torch.float64 })
+  local b3 = torch.tensor({ 0, 0, 1 }, { dtype = torch.float64 })
+  local h1 = identity - values:get(1) * b1:outer(b1)
+  local h2 = identity - values:get(2) * b2:outer(b2)
+  local h3 = identity - values:get(3) * b3:outer(b3)
+  assert_tensor(q, h1:matmul(h2):matmul(h3):totable(), 1e-12)
+  assert_dtype(torch.linalg.householder_product(a:float(), values:float()),
+    "float32")
+end)
+
+test("householder_product handles batches, partial tau, and empties", function()
+  local a = float_matrix({
+    { 7, 8, 9 },
+    { 0.6, 9, 1 },
+    { 0.8, 0.2, 5 },
+  })
+  local tau = torch.tensor({
+    2 / (0.6 ^ 2 + 0.8 ^ 2),
+    2 / (1 + 0.2 ^ 2),
+    0.5,
+  }, { dtype = torch.float64 })
+  local single = a:householder_product(tau)
+  local batch_a = a:unsqueeze(1):expand(2, 3, 3):contiguous()
+  local batch_tau = tau:unsqueeze(1):expand(2, 3):contiguous()
+  local batch = batch_a:householder_product(batch_tau)
+  assert_shape(batch, { 2, 3, 3 })
+  for i = 1, 2 do
+    assert_tensor(batch:select(1, i), single:totable(), 1e-12)
+  end
+
+  local tall = float_matrix({
+    { 7, 8 },
+    { 0.6, 9 },
+    { 0.8, 0.2 },
+    { 0.4, 0.1 },
+  })
+  local one = torch.tensor({ 2 / (0.6 ^ 2 + 0.8 ^ 2 + 0.4 ^ 2) },
+    { dtype = torch.float64 })
+  local q = tall:householder_product(one)
+  assert_shape(q, { 4, 2 })
+  local b = torch.tensor({ 1, 0.6, 0.8, 0.4 }, { dtype = torch.float64 })
+  local h = torch.eye(4, { dtype = torch.float64 }) -
+    one:get(1) * b:outer(b)
+  assert_tensor(q, h:narrow(2, 1, 2):totable(), 1e-12)
+
+  assert_shape(torch.zeros(3, 0, { dtype = torch.float64 })
+    :householder_product(torch.zeros(0, { dtype = torch.float64 })), { 3, 0 })
+  assert_shape(torch.zeros(0, 0, { dtype = torch.float64 })
+    :householder_product(torch.zeros(0, { dtype = torch.float64 })), { 0, 0 })
+end)
+
+test("householder_product gradients match central differences", function()
+  local values_a = {
+    { 7, 8, 9 },
+    { 0.6, 9, 1 },
+    { 0.8, 0.2, 5 },
+  }
+  local values_tau = {
+    2 / (0.6 ^ 2 + 0.8 ^ 2),
+    2 / (1 + 0.2 ^ 2),
+    0.5,
+  }
+  local a = torch.tensor(values_a, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local tau = torch.tensor(values_tau, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  a:householder_product(tau):sum():backward()
+
+  local eps = 1e-6
+  local function numeric(side, i, j, delta)
+    local copy_a = deep_copy(values_a)
+    local copy_tau = { values_tau[1], values_tau[2], values_tau[3] }
+    if side == "a" then
+      copy_a[i][j] = copy_a[i][j] + delta
+    else
+      copy_tau[i] = copy_tau[i] + delta
+    end
+    local ta = torch.tensor(copy_a, { dtype = torch.float64 })
+    local tt = torch.tensor(copy_tau, { dtype = torch.float64 })
+    return ta:householder_product(tt):sum():item()
+  end
+  for i = 1, 3 do
+    for j = 1, 3 do
+      assert_near(a:grad():get(i, j),
+        (numeric("a", i, j, eps) - numeric("a", i, j, -eps)) / (2 * eps),
+        1e-5)
+    end
+  end
+  for i = 1, 3 do
+    assert_near(tau:grad():get(i),
+      (numeric("tau", i, 1, eps) - numeric("tau", i, 1, -eps)) / (2 * eps),
+      1e-5)
+  end
+end)
+
+test("householder_product validates shapes, tau, and dtypes", function()
+  local a = float_matrix({ { 1, 2 }, { 3, 4 }, { 5, 6 } })
+  local tau = torch.tensor({ 0.5, 0.25 }, { dtype = torch.float64 })
+  assert_error(function()
+    a:householder_product({ 0.5, 0.25 })
+  end, "tau tensor")
+  assert_error(function()
+    torch.linalg.householder_product(torch.ones(2), torch.ones(1, {
+      dtype = torch.float64,
+    }))
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.ones(3, 2, { dtype = torch.float16 }):householder_product(
+      torch.ones(2, { dtype = torch.float16 }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(3, 2, { dtype = torch.int64 }):householder_product(
+      torch.ones(2, { dtype = torch.int64 }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(3, 2, { dtype = torch.bool }):householder_product(
+      torch.ones(2, { dtype = torch.bool }))
+  end, "float32 and float64")
+  assert_error(function()
+    a:householder_product(tau:float())
+  end, "match the input dtype")
+  assert_error(function()
+    float_matrix({ { 1, 2, 3 }, { 4, 5, 6 } }):householder_product(
+      torch.ones(2, { dtype = torch.float64 }))
+  end, "input.shape[-2] >= input.shape[-1]")
+  assert_error(function()
+    a:householder_product(torch.ones(1, 2, { dtype = torch.float64 }))
+  end, "one dimension less")
+  assert_error(function()
+    torch.ones(2, 3, 2, { dtype = torch.float64 }):householder_product(
+      torch.ones(1, 2, { dtype = torch.float64 }))
+  end, "batch dimensions")
+  assert_error(function()
+    a:householder_product(torch.ones(3, { dtype = torch.float64 }))
+  end, "tau:size(-1)")
+end)
