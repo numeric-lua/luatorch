@@ -319,6 +319,7 @@ a:baddbmm(m1, m2, beta?, alpha?)  -- batched addmm
 ```lua
 a:inverse()
 a:tensorinv(ind?)   -- inverse of tensordot over the first ind dimensions
+a:tensorsolve(b, dims?)  -- solve tensordot(a, x, x:dim()) = b
 a:det()
 a:slogdet()         -- returns sign, logabsdet; batched and differentiable
 a:solve(b)          -- solve a x = b (b may be a vector or matrix)
@@ -341,6 +342,7 @@ a:cross(other, dim?)               -- 3-vector cross product along one dimension
 a:vecdot(other, dim?)              -- batched vector dot along one dimension
 
 torch.linalg.inv(a)      torch.linalg.tensorinv(a, ind?)
+torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.svdvals(a)  -- descending singular values
@@ -374,6 +376,22 @@ are accepted, and autograd flows through the underlying inverse:
 local a = torch.eye(12, {dtype = torch.float64}):reshape(3, 4, 2, 2, 3)
 local inv = torch.linalg.tensorinv(a, 2)
 print(inv:sizes())                    -- {2, 2, 3, 3, 4}
+```
+
+`tensorsolve` solves `torch.tensordot(A, X, X:dim()) = B`, returning `X`
+with shape `A:sizes()[B:dim() + 1:]`. The first `B:dim()` dimensions of `A`
+form the `m` equations and the remaining dimensions form the `n` unknowns;
+the products must match. `dims` optionally moves the listed dimensions of `A`
+to the end before grouping, which lets the contracted dimensions appear
+anywhere in `A`. `B` may have any shape as long as it has `m` elements. Only
+real float32/float64 inputs are accepted and both operands must share the
+dtype; the solution is differentiable with respect to `A` and `B`:
+
+```lua
+local a = torch.eye(16, {dtype = torch.float64}):reshape(2, 2, 2, 2)
+local b = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
+local x = torch.linalg.tensorsolve(a, b)
+print(x:sizes())                      -- {2, 2}
 ```
 
 `svdvals` returns only the singular values of a matrix or a batch of

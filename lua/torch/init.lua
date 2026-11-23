@@ -733,6 +733,7 @@ end
 torch.linalg = {
   inv = function(a) return a:inverse() end,
   tensorinv = function(a, ind) return a:tensorinv(ind) end,
+  tensorsolve = function(a, b, dims) return a:tensorsolve(b, dims) end,
   det = function(a) return a:det() end,
   slogdet = function(a) return a:slogdet() end,
   solve = function(a, b) return a:solve(b) end,

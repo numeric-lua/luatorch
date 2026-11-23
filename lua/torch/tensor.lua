@@ -1342,6 +1342,78 @@ function Tensor:tensorinv(ind)
   return self:reshape(m, n):inverse():reshape(output_shape)
 end
 
+-- Solve tensordot(A, X, X:dim()) = B. The leading B:dim() dimensions of A
+-- are grouped into m rows and the remaining dimensions into n columns; the
+-- system is solved as an m x n matrix equation. `dims` optionally moves the
+-- listed dimensions of A to the end before grouping, matching
+-- torch.linalg.tensorsolve.
+function Tensor:tensorsolve(other, dims)
+  if not is_tensor(other) then
+    error("tensorsolve expects a tensor right-hand side", 3)
+  end
+  if self:dim() < 1 then
+    error("tensorsolve expects a tensor with at least one dimension", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("tensorsolve supports float32 and float64 tensors", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("tensorsolve expects the right-hand side to match the tensor dtype", 3)
+  end
+  local rank = self:dim()
+  local rhs_rank = other:dim()
+  if rhs_rank > rank then
+    error("tensorsolve expects the right-hand side to have no more " ..
+      "dimensions than A", 3)
+  end
+
+  local moved = self
+  if dims ~= nil then
+    if type(dims) ~= "table" then
+      error("tensorsolve dims must be a table of dimensions", 3)
+    end
+    local axes, seen = {}, {}
+    for i = 1, #dims do
+      local axis = dimension_argument(dims[i], rank, "tensorsolve dims")
+      if seen[axis] then
+        error("tensorsolve dims must be unique", 3)
+      end
+      seen[axis] = true
+      axes[i] = axis
+    end
+    if #axes > 0 then
+      local permutation = {}
+      for i = 1, rank do
+        if not seen[i] then permutation[#permutation + 1] = i end
+      end
+      for i = 1, #axes do permutation[#permutation + 1] = axes[i] end
+      moved = self:permute(unpack(permutation))
+    end
+  end
+
+  local shape = moved:sizes()
+  local m, n = 1, 1
+  for i = 1, rhs_rank do m = m * shape[i] end
+  for i = rhs_rank + 1, #shape do n = n * shape[i] end
+  if m ~= n then
+    error(string.format(
+      "tensorsolve expects prod(shape[1:%d]) == prod(shape[%d:]), " ..
+      "got %d and %d", rhs_rank, rhs_rank + 1, m, n), 3)
+  end
+  if other:numel() ~= m then
+    error(string.format(
+      "tensorsolve expects B to have %d elements, got %d",
+      m, other:numel()), 3)
+  end
+  local solution = moved:reshape(m, n):solve(other:reshape(m))
+  local output_shape = {}
+  for i = rhs_rank + 1, #shape do
+    output_shape[#output_shape + 1] = shape[i]
+  end
+  return solution:reshape(output_shape)
+end
+
 function Tensor:det()
   return wrap(lib.lt_linalg_det(self.h))
 end

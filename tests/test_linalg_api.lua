@@ -4,6 +4,15 @@ local function float_matrix(rows)
   return torch.tensor(rows, { dtype = torch.float64 })
 end
 
+local function deep_copy(value)
+  if type(value) ~= "table" then return value end
+  local copy = {}
+  for key, item in pairs(value) do
+    copy[key] = deep_copy(item)
+  end
+  return copy
+end
+
 test("svdvals returns descending singular values", function()
   local matrix = float_matrix({ { 1, 2 }, { 3, 4 }, { 5, 6 } })
   local values = matrix:svdvals()
@@ -302,4 +311,153 @@ test("tensorinv validates ind, shape products, and dtypes", function()
   assert_error(function()
     torch.ones(2, 2, { dtype = torch.bool }):tensorinv(1)
   end, "float32 and float64")
+end)
+
+test("tensorsolve solves grouped tensor systems", function()
+  local identity = torch.eye(24, { dtype = torch.float64 })
+  local a = identity:reshape(6, 4, 2, 3, 4)
+  local b = torch.tensor({
+    { 1, 2, 3, 4 }, { 5, 6, 7, 8 }, { 9, 10, 11, 12 },
+    { 13, 14, 15, 16 }, { 17, 18, 19, 20 }, { 21, 22, 23, 24 },
+  }, { dtype = torch.float64 })
+  local x = torch.linalg.tensorsolve(a, b)
+  assert_shape(x, { 2, 3, 4 })
+  assert_tensor(a:reshape(24, 24):matmul(x:reshape(24)),
+    b:reshape(24):totable(), 1e-12)
+
+  local matrix = float_matrix({ { 3, 1 }, { 1, 2 } })
+  local rhs = torch.tensor({ 9, 8 }, { dtype = torch.float64 })
+  assert_tensor(torch.linalg.tensorsolve(matrix, rhs),
+    matrix:solve(rhs):totable(), 1e-12)
+
+  -- Move dims 1 and 3 to the end, then solve the 24x24 grouped system.
+  local moved = identity:reshape(4, 3, 2, 6, 4)
+  local original = moved:permute(4, 1, 5, 2, 3)
+  local expected = torch.arange(1, 25, 1, {
+    dtype = torch.float64,
+  }):reshape(6, 4)
+  local target = identity:matmul(expected:reshape(24)):reshape(4, 3, 2)
+  local solved = torch.linalg.tensorsolve(original, target, { 1, 3 })
+  assert_shape(solved, { 6, 4 })
+  assert_tensor(solved, expected:totable(), 1e-10)
+
+  local batch = float_matrix({
+    { 2, 1, 0, 0 },
+    { 1, 3, 1, 0 },
+    { 0, 1, 2, 1 },
+    { 0, 0, 1, 3 },
+  }):reshape(2, 2, 2, 2)
+  local batch_expected = float_matrix({ { 1, 3 }, { 2, 2 } })
+  local batch_rhs = batch:reshape(4, 4):matmul(
+    batch_expected:reshape(4)):reshape(2, 2)
+  local batch_x = torch.linalg.tensorsolve(batch, batch_rhs)
+  assert_shape(batch_x, { 2, 2 })
+  assert_tensor(batch_x, batch_expected:totable(), 1e-12)
+
+  assert_shape(torch.linalg.tensorsolve(torch.zeros(0, 0, {
+    dtype = torch.float64,
+  }), torch.zeros(0, { dtype = torch.float64 })), { 0 })
+end)
+
+test("tensorsolve gradients match central differences", function()
+  local values_a = {
+    { { { 2.0, 0.3 }, { 0.1, 1.5 } },
+      { { 0.2, -0.1 }, { 0.4, 2.2 } } },
+    { { { 0.5, 0.2 }, { -0.3, 1.1 } },
+      { { 0.6, 0.0 }, { 0.2, 1.9 } } },
+  }
+  local values_b = { { 1.0, -0.5 }, { 2.0, 3.0 } }
+  local a = torch.tensor(values_a, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local b = torch.tensor(values_b, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local weights = float_matrix({ { 1.0, -2.0 }, { 0.5, 3.0 } })
+  local loss = (a:tensorsolve(b) * weights):sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(side, i, j, k, l, delta)
+    local copy_a = deep_copy(values_a)
+    local copy_b = deep_copy(values_b)
+    if side == "a" then
+      copy_a[i][j][k][l] = copy_a[i][j][k][l] + delta
+    else
+      copy_b[i][j] = copy_b[i][j] + delta
+    end
+    local ta = torch.tensor(copy_a, { dtype = torch.float64 })
+    local tb = torch.tensor(copy_b, { dtype = torch.float64 })
+    return (ta:tensorsolve(tb) * weights):sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      for k = 1, 2 do
+        for l = 1, 2 do
+          assert_near(a:grad():get(i, j, k, l),
+            (numeric("a", i, j, k, l, eps) -
+              numeric("a", i, j, k, l, -eps)) / (2 * eps), 1e-5)
+        end
+      end
+    end
+  end
+  for i = 1, 2 do
+    for j = 1, 2 do
+      assert_near(b:grad():get(i, j),
+        (numeric("b", i, j, 1, 1, eps) -
+          numeric("b", i, j, 1, 1, -eps)) / (2 * eps), 1e-5)
+    end
+  end
+end)
+
+test("tensorsolve validates shapes, dims, and dtypes", function()
+  local a = float_matrix({ { 1, 2 }, { 3, 4 } })
+  local b = torch.tensor({ 1, 2 }, { dtype = torch.float64 })
+  assert_error(function()
+    a:tensorsolve({ 1, 2 })
+  end, "right-hand side")
+  assert_error(function()
+    torch.linalg.tensorsolve(a, torch.ones(2, 2, 2, {
+      dtype = torch.float64,
+    }))
+  end, "no more")
+  assert_error(function()
+    a:tensorsolve(b, 1)
+  end, "table of dimensions")
+  assert_error(function()
+    a:tensorsolve(b, { 1, 1 })
+  end, "unique")
+  assert_error(function()
+    a:tensorsolve(b, { 3 })
+  end, "out of range")
+  assert_error(function()
+    torch.ones(2, 3, { dtype = torch.float64 }):tensorsolve(
+      torch.ones(2, { dtype = torch.float64 }))
+  end, "got 2 and 3")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float64 }):tensorsolve(
+      torch.ones(3, { dtype = torch.float64 }))
+  end, "have 2 elements")
+  assert_error(function()
+    a:tensorsolve(torch.ones(2, { dtype = torch.float32 }))
+  end, "match the tensor dtype")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):tensorsolve(
+      torch.ones(2, { dtype = torch.float16 }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):tensorsolve(
+      torch.ones(2, { dtype = torch.int64 }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):tensorsolve(
+      torch.ones(2, { dtype = torch.bool }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.linalg.tensorsolve(torch.tensor(1.0, {
+      dtype = torch.float64,
+    }), torch.tensor(1.0, { dtype = torch.float64 }))
+  end, "at least one dimension")
 end)
