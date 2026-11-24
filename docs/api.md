@@ -845,6 +845,24 @@ print(torch.linalg.norm(a, nil, 1):totable())      -- column 2-norms
 print(torch.linalg.norm(a, "fro", {1, 2}, true):sizes())  -- {1, 1}
 ```
 
+`torch.linalg.cond(a, p?)` computes the condition number of a matrix or batch
+of matrices. The spectral orders `2` and `-2` use the largest and smallest
+singular values and accept rectangular inputs; every other order multiplies a
+matrix norm by the same norm of the inverse, so square matrices are required.
+Supported orders are `2` (the default), `-2` (smallest/largest singular
+value), `1`, `-1`, `math.huge`, `-math.huge`, `"fro"`, and `"nuc"`
+(case-insensitive). A plain 2-D input keeps the historical Lua-number result,
+while batches return a tensor with the batch shape. Only float32 and float64
+are accepted:
+
+```lua
+local a = torch.tensor({{{2, 0}, {0, 1}}, {{1, 0}, {0, 1}}},
+  {dtype = torch.float64})
+print(torch.linalg.cond(a, 2):totable())    -- {2, 1}
+print(torch.linalg.cond(a, -2):totable())   -- {0.5, 1}
+print(torch.linalg.cond(a, "nuc"):totable()) -- {4.5, 4}
+```
+
 `torch.linalg.matrix_rank(a, tol?, hermitian?)` returns the numerical rank of
 a matrix or batch of matrices. The default tolerance is
 `max(m, n) * eps(dtype) * largest singular value`; a numeric `tol` is used as
@@ -1198,7 +1216,7 @@ torch.linalg.cholesky_inverse(a, upper?)  -- inverse from a Cholesky factor
 torch.cholesky_solve(b, factor, upper?)   -- solve from a Cholesky factor
 torch.linalg.eigh(a, uplo?) / torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.inv_ex(a, opts?)    -- inverse plus int32 info
-torch.linalg.cond(a, p?)         -- 2, 1, inf, fro
+torch.linalg.cond(a, p?)         -- 2, -2, 1, -1, inf, -inf, fro, nuc
 torch.linalg.matrix_rank(a, tol?, hermitian?)
                                   -- batched int64 ranks; 2-D returns a number
 torch.linalg.matrix_power(a, n)  -- integer matrix power

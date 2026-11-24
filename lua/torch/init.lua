@@ -950,6 +950,47 @@ local function matrix_rank_tensor(a, tol, hermitian)
   return torch.tensor(ranks, { dtype = torch.int64 }):reshape(batch_shape)
 end
 
+-- Condition number of a matrix or batch of matrices. The spectral orders
+-- (2 and -2) use singular values and accept rectangular inputs; every other
+-- order multiplies the norm of the input by the norm of its inverse, so it
+-- requires square matrices. -2 is smallest/largest singular value, matching
+-- PyTorch's reciprocal condition number for that order.
+local function cond_tensor(a, p)
+  if not Tensor.is_tensor(a) then
+    error("cond expects a tensor", 3)
+  end
+  if a:dim() < 2 then
+    error("cond expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = a:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("cond supports float32 and float64 tensors", 3)
+  end
+  if p == nil then p = 2 end
+  if type(p) == "string" then p = p:lower() end
+  local square = a:size(-2) == a:size(-1)
+
+  if p == 2 then
+    return matrix_norm_tensor(a, 2, -2, -1) /
+      matrix_norm_tensor(a, -2, -2, -1)
+  elseif p == -2 then
+    return matrix_norm_tensor(a, -2, -2, -1) /
+      matrix_norm_tensor(a, 2, -2, -1)
+  end
+
+  local valid = p == 1 or p == -1 or p == math.huge or p == -math.huge or
+    p == "fro" or p == "nuc"
+  if not valid then
+    error("cond supports 2, -2, 1, -1, inf, -inf, 'fro', and 'nuc'", 3)
+  end
+  if not square then
+    error("cond with p=" .. tostring(p) .. " expects square matrices", 3)
+  end
+  local inverse = a:inverse()
+  return matrix_norm_tensor(a, p, -2, -1) *
+    matrix_norm_tensor(inverse, p, -2, -1)
+end
+
 torch.linalg = {
   inv = function(a) return a:inverse() end,
   inv_ex = function(a, opts)
@@ -1099,23 +1140,10 @@ torch.linalg = {
     error("norm dim must be an integer or a table of dimensions", 3)
   end,
   cond = function(a, p)
-    if not Tensor.is_tensor(a) or a:dim() ~= 2 then
-      error("cond expects a 2-D tensor", 3)
-    end
-    p = p == nil and 2 or p
-    local _, singular = a:svd()
-    if p == 2 then return singular:max():item() / singular:min():item() end
-    local inverse = a:inverse()
-    if p == 1 then
-      return torch.linalg.matrix_norm(a, 1) * torch.linalg.matrix_norm(inverse, 1)
-    elseif p == math.huge then
-      return torch.linalg.matrix_norm(a, math.huge) *
-        torch.linalg.matrix_norm(inverse, math.huge)
-    elseif p == "fro" then
-      return torch.linalg.matrix_norm(a, "fro") *
-        torch.linalg.matrix_norm(inverse, "fro")
-    end
-    error("cond supports 2, 1, inf, and 'fro'", 3)
+    local result = cond_tensor(a, p)
+    -- Preserve the historical Lua-number result for a plain 2-D matrix.
+    if result:dim() == 0 then return result:item() end
+    return result
   end,
   matrix_rank = function(a, tol, hermitian)
     return matrix_rank_tensor(a, tol, hermitian)
