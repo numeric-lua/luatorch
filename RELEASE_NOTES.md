@@ -1,3 +1,41 @@
+# luatorch 0.31.0
+
+- five real-valued linalg/API gaps are covered: `cholesky_inverse`,
+  `cholesky_solve`, the `torch.linalg.lu_unpack` alias, batch-aware
+  `matrix_rank` with `hermitian`, and batch-aware `cond` with all real
+  orders;
+- `torch.linalg.cholesky_inverse` / `Tensor:cholesky_inverse(upper?)` /
+  `torch.cholesky_inverse` recovers `A^{-1}` from the lower or upper Cholesky
+  factor. Square, batched, and float32/float64 factors are supported, and
+  the inverse differentiates through the factor;
+- `torch.cholesky_solve` / `Tensor:cholesky_solve(factor, upper?)` solves
+  `A X = B` from a Cholesky factor. `B` has shape `(*, n, k)`, its batch
+  dimensions may broadcast over the factor, both operands must share
+  float32/float64 dtype, and the solution is differentiable. This is the
+  top-level PyTorch spelling rather than a new `torch.linalg` name;
+- `torch.linalg.lu_unpack(lu, pivots, opts?)` now mirrors
+  `torch.lu_unpack`, including the same packed-factor validation and
+  `unpack_data`/`unpack_pivots` options;
+- `torch.linalg.matrix_rank(a, tol?, hermitian?)` accepts a matrix or batch,
+  uses an absolute `tol` when supplied, and switches to absolute symmetric
+  eigenvalues with `hermitian=true`. The default tolerance is
+  `max(m, n) * eps(dtype) * largest value`; 2-D calls keep returning a Lua
+  number while batches return an int64 tensor with the batch shape;
+- `torch.linalg.cond(a, p?)` now accepts batches and all real-valued orders:
+  `2`, `-2`, `1`, `-1`, `inf`, `-inf`, `"fro"`, and `"nuc"`. The spectral
+  orders accept rectangular inputs, `-2` is the reciprocal
+  (smallest/largest), and the other orders require square matrices. Plain
+  2-D calls keep returning a Lua number;
+- 515 tests cover known values, lower/upper factors, batched and empty
+  inputs, central-difference gradients, rank tolerances and hermitian paths,
+  every condition order, and validation errors; `./scripts/test.sh` is green;
+- docs, docs guards, README status/examples/feature table, roadmap, CHANGELOG,
+  and the `0.31.0` rockspec are updated. C++ changes are limited to two
+  Cholesky shim entry points plus their header and FFI declarations;
+  `matrix_rank` and `cond` are implemented in Lua over the existing
+  `svdvals`, `eigvalsh`, `matrix_norm`, and `inverse` paths; no timing gate
+  was added.
+
 # luatorch 0.30.0
 
 - five real-valued `torch.linalg` gaps are covered:

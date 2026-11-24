@@ -210,6 +210,18 @@ local y = torch.tensor({1, 2, 3}, {dtype = torch.float64})
 print(torch.trapezoid(y, {dx = 0.5}):item())  -- 2.0
 ```
 
+`torch.linalg.cholesky_inverse` and `torch.cholesky_solve` reuse a Cholesky
+factor for a symmetric positive-definite system. The factor is lower by
+default; pass `true` for the upper factor. Both support batches and autograd:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
+local l = a:cholesky()
+print(torch.linalg.cholesky_inverse(l):allclose(a:inverse()))  -- true
+print(torch.cholesky_solve(b, l):allclose(a:solve(b)))         -- true
+```
+
 Smaller matrix helpers round out the same real-valued API. `lu_unpack`
 rebuilds `P`, `L`, and `U` from a packed factorization, `diagonal` extracts any
 offset from any dimension pair, `vander` builds Vandermonde matrices,
@@ -295,9 +307,13 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.30.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.31.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **504 tests**. The 0.30
+> first-order fused backward, fused reductions, and **515 tests**. The 0.31
+> additions are `torch.linalg.cholesky_inverse`, `torch.cholesky_solve`,
+> the `torch.linalg.lu_unpack` alias, batched/hermitian `matrix_rank`, and
+> batched `cond` with all real-valued orders, with real-valued validation,
+> autograd where the underlying ATen op supports it, tests, and docs. The 0.30
 > additions are `torch.linalg.lu_factor_ex`, `torch.linalg.solve_ex`,
 > `torch.linalg.ldl_factor`, `torch.linalg.ldl_factor_ex`, and
 > `torch.linalg.ldl_solve`, with error-reporting `info` tensors, compact
@@ -453,7 +469,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Dtypes | float32/64/16, int8/16/32/64, uint8, bool; Torch7 typed constructors |
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_ex`, `solve_triangular`, `lu`, `lu_factor`, `lu_factor_ex`, `lu_solve`, `lu_unpack`, `ldl_factor`, `ldl_factor_ex`, `ldl_solve`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_ex`, `solve_triangular`, `lu`, `lu_factor`, `lu_factor_ex`, `lu_solve`, `lu_unpack`, `ldl_factor`, `ldl_factor_ex`, `ldl_solve`, `pinv`, `matrix_exp`, `diagonal`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_inverse`, `cholesky_solve`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `matrix_rank`, `cond`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

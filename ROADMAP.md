@@ -67,6 +67,9 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
 - [x] `lu_factor_ex`/`solve_ex` error-reporting solves and
   `ldl_factor`/`ldl_factor_ex`/`ldl_solve` compact symmetric-indefinite
   factorization
+- [x] `cholesky_inverse`/`cholesky_solve`, the `torch.linalg.lu_unpack`
+  alias, batched `matrix_rank` with `hermitian`, and batched `cond` across
+  all real-valued orders
 - [ ] complex `eig`/`eigvals` and remaining `linalg.*` bindings
 - [x] Random: `normal_`, `exponential_`, `bernoulli_`, `uniform_`, `multinomial`
 - [ ] More distributions: `poisson`, `geometric`, `cauchy`, tensor-weighted

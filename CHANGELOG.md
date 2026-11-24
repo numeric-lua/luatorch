@@ -3,6 +3,42 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.31.0] — 2026-11-24
+
+### Added
+
+- `torch.linalg.cholesky_inverse` / `Tensor:cholesky_inverse(upper?)` /
+  `torch.cholesky_inverse` recovers the inverse of a real symmetric
+  positive-definite matrix from its lower (`A = L L^T`) or upper
+  (`A = U^T U`) Cholesky factor; square, batched, and float32/float64 inputs
+  are supported, and the inverse is differentiable;
+- `torch.cholesky_solve` / `Tensor:cholesky_solve(factor, upper?)` solves
+  `A X = B` from a Cholesky factor, with `B` of shape `(*, n, k)`, broadcast
+  batch dimensions, lower/upper factors, shared float32/float64 dtype, and
+  autograd through the right-hand side;
+- `torch.linalg.lu_unpack(lu, pivots, opts?)` is now exposed as an alias of
+  `torch.lu_unpack`, including the namespace and docs guards;
+- `torch.linalg.matrix_rank` accepts matrices or batches, an absolute `tol`,
+  and `hermitian=true` for real symmetric square inputs; 2-D calls keep the
+  historical Lua-number result while batches return an int64 tensor with the
+  batch shape, and the default tolerance is
+  `max(m, n) * eps(dtype) * largest singular value`;
+- `torch.linalg.cond` accepts batches and every real-valued order: `2`, `-2`,
+  `1`, `-1`, `inf`, `-inf`, `"fro"`, and `"nuc"` (case-insensitive). The
+  spectral orders accept rectangular inputs and `-2` is the reciprocal
+  (smallest/largest), while the remaining orders require square matrices;
+  2-D calls keep the historical Lua-number result.
+
+### Changed
+
+- `docs/api.md`, the docs API guards, README status/examples/feature table,
+  roadmap, release notes, and the `0.31.0` rockspec describe or guard the new
+  APIs. C++ changes are limited to two Cholesky shim entry points plus their
+  header and FFI declarations; `matrix_rank` and `cond` are pure Lua.
+- 515 tests cover the new values, lower/upper factors, batched and empty
+  inputs, central-difference gradients, rank tolerances and hermitian paths,
+  all condition orders, and validation errors.
+
 ## [0.30.0] — 2026-11-23
 
 ### Added
