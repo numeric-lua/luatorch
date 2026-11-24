@@ -22,7 +22,7 @@ local fun = require("fun")
 
 local torch = {}
 
-torch.VERSION = "0.32.0"
+torch.VERSION = "0.33.0"
 torch.version = libmod.version
 torch.__version = libmod.version
 torch.Tensor = Tensor
@@ -1057,7 +1057,7 @@ torch.linalg = {
   tensorsolve = function(a, b, dims) return a:tensorsolve(b, dims) end,
   det = function(a) return a:det() end,
   slogdet = function(a) return a:slogdet() end,
-  solve = function(a, b) return a:solve(b) end,
+  solve = function(a, b, opts) return a:solve(b, opts) end,
   solve_ex = function(a, b, opts)
     if not Tensor.is_tensor(a) then
       error("solve_ex expects a tensor", 3)
@@ -1336,6 +1336,34 @@ function torch.diagonal(a, offset, dim1, dim2)
     error("torch.diagonal expects a tensor", 2)
   end
   return a:diagonal(offset, dim1, dim2)
+end
+
+function torch.tril(a, diagonal)
+  if not Tensor.is_tensor(a) then
+    error("torch.tril expects a tensor", 2)
+  end
+  return a:tril(diagonal)
+end
+
+function torch.triu(a, diagonal)
+  if not Tensor.is_tensor(a) then
+    error("torch.triu expects a tensor", 2)
+  end
+  return a:triu(diagonal)
+end
+
+function torch.trace(a)
+  if not Tensor.is_tensor(a) then
+    error("torch.trace expects a tensor", 2)
+  end
+  return a:trace()
+end
+
+function torch.diag(a, diagonal)
+  if not Tensor.is_tensor(a) then
+    error("torch.diag expects a tensor", 2)
+  end
+  return a:diag(diagonal)
 end
 
 function torch.vander(x, N, increasing)

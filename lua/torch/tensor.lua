@@ -1185,6 +1185,40 @@ local function stack_tensors(tensors, dim)
   return wrap(lib.lt_stack(array, count, dim))
 end
 
+local function cat_tensors(tensors, dim)
+  local count = #tensors
+  if count == 0 then
+    error("cannot concatenate an empty tensor list", 3)
+  end
+  local array = ffi.new("lt_tensor*[?]", count)
+  for i = 1, count do
+    array[i - 1] = tensors[i].h
+  end
+  return wrap(lib.lt_cat(array, count, dim))
+end
+
+-- Zero-based (row, column) offset grid, shape (rows, cols). Used to build
+-- triangular and diagonal masks that broadcast over batch dimensions.
+local function offset_grid(rows, cols)
+  if rows == 0 or cols == 0 then
+    return zeros_tensor({ rows, cols }, 2)
+  end
+  local row = arange_tensor(0, rows, 2):reshape(rows, 1)
+  local column = arange_tensor(0, cols, 2):reshape(1, cols)
+  return column:sub(row)
+end
+
+local function diagonal_offset(value, name)
+  if value == nil then
+    return 0
+  end
+  if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+      value == math.huge or value == -math.huge then
+    error(name .. " diagonal must be an integer", 3)
+  end
+  return math.floor(value)
+end
+
 local function einstein_unary(tensor, equation)
   local array = ffi.new("lt_tensor*[?]", 1)
   array[0] = tensor.h
@@ -1531,8 +1565,44 @@ function Tensor:slogdet()
   return wrap(sign_pointer[0]), wrap(logabsdet_pointer[0])
 end
 
-function Tensor:solve(other)
-  return wrap(lib.lt_linalg_solve(self.h, other.h))
+function Tensor:solve(other, opts)
+  if not is_tensor(other) then
+    error("solve expects a tensor right-hand side", 3)
+  end
+  local left = true
+  if opts ~= nil then
+    if type(opts) ~= "table" then
+      error("solve options must be a table", 3)
+    end
+    for name in pairs(opts) do
+      if name ~= "left" then
+        error("solve got unknown option '" .. tostring(name) .. "'", 3)
+      end
+    end
+    if opts.left ~= nil then
+      if type(opts.left) ~= "boolean" then
+        error("solve left must be a boolean", 3)
+      end
+      left = opts.left
+    end
+  end
+  if left then
+    return wrap(lib.lt_linalg_solve(self.h, other.h))
+  end
+  -- X A = B  <=>  A^T X^T = B^T, so solve the transposed system and
+  -- transpose the result's last two dimensions back.
+  if self:dim() < 2 then
+    error("solve with left=false expects a matrix or batch of matrices", 3)
+  end
+  if other:dim() < 2 then
+    error("solve with left=false expects a right-hand side with at least " ..
+      "two dimensions", 3)
+  end
+  local transposed_matrix = self:transpose(-2, -1)
+  local transposed_rhs = other:transpose(-2, -1)
+  local transposed_solution = wrap(
+    lib.lt_linalg_solve(transposed_matrix.h, transposed_rhs.h))
+  return transposed_solution:transpose(-2, -1)
 end
 
 local solve_ex_options = {
@@ -2539,6 +2609,75 @@ function Tensor:diagonal(offset, dim1, dim2)
   local out_shape = { unpack(batch_shape) }
   out_shape[#out_shape + 1] = length
   return diagonal:reshape(out_shape)
+end
+
+-- Lower/upper triangular part of a matrix or batch of matrices. Entries on
+-- the far side of the requested diagonal are zeroed; the diagonal is 0-based
+-- like torch.tril/torch.triu (positive above the main diagonal, negative
+-- below). The mask broadcasts over batch dimensions, and masked_fill carries
+-- autograd with zero gradient in the zeroed triangle.
+local function triangular(tensor, diagonal, keep_lower, name)
+  if tensor:dim() < 2 then
+    error(name .. " expects a tensor with at least two dimensions", 3)
+  end
+  diagonal = diagonal_offset(diagonal, name)
+  local rows, columns = tensor:size(-2), tensor:size(-1)
+  local offsets = offset_grid(rows, columns)
+  local zero_mask
+  if keep_lower then
+    zero_mask = offsets:gt(diagonal)
+  else
+    zero_mask = offsets:lt(diagonal)
+  end
+  return tensor:masked_fill(zero_mask, 0)
+end
+
+function Tensor:tril(diagonal)
+  return triangular(self, diagonal, true, "tril")
+end
+
+function Tensor:triu(diagonal)
+  return triangular(self, diagonal, false, "triu")
+end
+
+-- Sum of the main diagonal of a 2-D matrix.
+function Tensor:trace()
+  if self:dim() ~= 2 then
+    error("trace expects a 2-D matrix", 3)
+  end
+  return self:diagonal(0, 1, 2):sum()
+end
+
+-- torch.diag: extract a diagonal from a 2-D matrix, or build a matrix from a
+-- 1-D vector. Construction uses a broadcast mask over a padded column, so the
+-- result is differentiable with respect to the vector.
+function Tensor:diag(diagonal)
+  local rank = self:dim()
+  if rank ~= 1 and rank ~= 2 then
+    error("diag expects a 1-D or 2-D tensor", 3)
+  end
+  diagonal = diagonal_offset(diagonal, "diag")
+  if rank == 2 then
+    return self:diagonal(diagonal, 1, 2)
+  end
+
+  local count = self:size(1)
+  local size = count + math.abs(diagonal)
+  local dtype = self:dtype_id()
+  if count == 0 then
+    return zeros_tensor({ size, size }, dtype)
+  end
+  local padding = zeros_tensor({ math.abs(diagonal) }, dtype)
+  local padded
+  if diagonal >= 0 then
+    padded = cat_tensors({ self, padding }, 0)
+  else
+    padded = cat_tensors({ padding, self }, 0)
+  end
+  local columns = padded:reshape(size, 1):expand(size, size)
+  local offsets = offset_grid(size, size)
+  local keep = offsets:eq(diagonal)
+  return columns:masked_fill(keep:logical_not(), 0)
 end
 
 function Tensor:mv(vector)

@@ -157,6 +157,7 @@ local files = {
   "test_linalg.lua",
   "test_linalg_helpers.lua",
   "test_linalg_api.lua",
+  "test_linalg_triangular.lua",
   "test_random.lua",
   "test_autograd.lua",
   "test_nn.lua",

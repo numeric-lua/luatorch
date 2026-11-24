@@ -1,3 +1,34 @@
+# luatorch 0.33.0
+
+- five real-valued linalg/API gaps are covered: `tril`, `triu`, `trace`,
+  `diag`, and the `left=false` (right-side) option on `torch.linalg.solve`;
+- `torch.tril` / `Tensor:tril(diagonal?)` and `torch.triu` /
+  `Tensor:triu(diagonal?)` zero the opposite triangle of a matrix or batch of
+  matrices. The 0-based offset defaults to 0, is positive above the main
+  diagonal and negative below, broadcasts over batches, accepts every dtype,
+  and carries autograd with zero gradient in the zeroed half;
+- `torch.trace` / `Tensor:trace()` sums the main diagonal of a 2-D matrix into a
+  0-dim tensor, accepts integer and floating dtypes, and is differentiable;
+- `torch.diag` / `Tensor:diag(diagonal?)` extracts a diagonal from a 2-D
+  matrix or builds a square matrix from a 1-D vector, padding with zeros.
+  Offsets use the same 0-based convention as `tril`/`triu`, empty vectors are
+  supported, 1-D construction accepts every dtype including bool, 2-D
+  extraction follows `diagonal` (integer and floating), and both directions
+  differentiate;
+- `torch.linalg.solve(a, b, opts?)` / `Tensor:solve(b, opts?)` accept
+  `{ left = false }` for `X A = B`. The right-hand side has shape `(*, k, n)`
+  and the result keeps that shape; the implementation solves the transposed
+  left system, so gradients flow to the matrix and the right-hand side.
+  Vector right-hand sides remain left-solve only, and unknown options,
+  non-boolean `left`, and 1-D right-hand sides are rejected;
+- 13 tests in `tests/test_linalg_triangular.lua` cover triangle values and
+  offsets, batches, integer/bool dtypes, empty shapes, autograd, validation,
+  `diag` construction/extraction, and batched/right-side solves; the suite is
+  now **542 tests** and `./scripts/test.sh` is green;
+- docs, docs guards, README status/feature table/build count, roadmap,
+  CHANGELOG, and the `0.33.0` rockspec are updated. Every change is pure Lua:
+  no C++ shim or FFI declaration changed.
+
 # luatorch 0.32.0
 
 - five PyTorch API-parity tasks are implemented: `aminmax`, `count_nonzero`,

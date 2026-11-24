@@ -70,6 +70,8 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
 - [x] `cholesky_inverse`/`cholesky_solve`, the `torch.linalg.lu_unpack`
   alias, batched `matrix_rank` with `hermitian`, and batched `cond` across
   all real-valued orders
+- [x] `tril`/`triu`, `trace`, `diag`, and the `left=false` right-side
+  `torch.linalg.solve` option with autograd and validation
 - [ ] complex `eig`/`eigvals` and remaining `linalg.*` bindings
 - [x] Random: `normal_`, `exponential_`, `bernoulli_`, `uniform_`, `multinomial`
 - [ ] More distributions: `poisson`, `geometric`, `cauchy`, tensor-weighted

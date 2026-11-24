@@ -3,6 +3,43 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.33.0] — 2026-11-24
+
+### Added
+
+- `torch.tril` / `Tensor:tril(diagonal?)` and `torch.triu` /
+  `Tensor:triu(diagonal?)` return the lower or upper triangular part of a
+  matrix or batch of matrices, zeroing the opposite half. The 0-based
+  `diagonal` defaults to 0, is positive above the main diagonal and negative
+  below it; the mask broadcasts over batch dimensions, every dtype is
+  accepted, and autograd flows through the kept triangle with zero gradient in
+  the zeroed half;
+- `torch.trace` / `Tensor:trace()` sums the main diagonal of a 2-D matrix and
+  returns a 0-dim tensor; it accepts integer and floating dtypes and is
+  differentiable;
+- `torch.diag` / `Tensor:diag(diagonal?)` mirrors `torch.diag`: a 2-D input
+  extracts the requested diagonal as a 1-D tensor, while a 1-D input builds a
+  square matrix with the vector on that diagonal (padded with zeros). The
+  offset uses the same 0-based convention as `tril`/`triu`, empty vectors are
+  supported, 1-D construction accepts every dtype including bool, 2-D
+  extraction follows `diagonal` (integer and floating dtypes), and both
+  directions are differentiable;
+- `torch.linalg.solve(a, b, opts?)` and `Tensor:solve(b, opts?)` accept
+  `{ left = false }` to solve `X A = B`. The right-hand side then has shape
+  `(*, k, n)` and the result keeps that shape; the solve is computed through a
+  transposed left solve, so gradients flow to both operands, and vector
+  right-hand sides remain left-solve only;
+- 13 tests in `tests/test_linalg_triangular.lua` cover values, offsets,
+  batches, integer/bool dtypes, empty shapes, autograd, validation, `diag`
+  construction and extraction, and the right-side solve; the suite is now
+  **542 tests**.
+
+### Changed
+
+- `docs/api.md`, the docs API guards, README status/feature table/build count,
+  roadmaps, release notes, and the `0.33.0` rockspec describe or guard the new
+  APIs. All changes are pure Lua; no C++ shim or FFI declaration changed.
+
 ## [0.32.0] — 2026-11-24
 
 ### Added

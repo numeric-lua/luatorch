@@ -1,4 +1,4 @@
-# luatorch API reference (0.32.0)
+# luatorch API reference (0.33.0)
 
 All examples assume:
 
@@ -323,7 +323,7 @@ a:tensorinv(ind?)   -- inverse of tensordot over the first ind dimensions
 a:tensorsolve(b, dims?)  -- solve tensordot(a, x, x:dim()) = b
 a:det()
 a:slogdet()         -- returns sign, logabsdet; batched and differentiable
-a:solve(b)          -- solve a x = b (b may be a vector or matrix)
+a:solve(b, opts?)   -- solve A x = b; opts.left=false solves x A = b
 a:solve_ex(b, opts?) -- solve plus int32 info; opts.left/check_errors
 a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
@@ -349,6 +349,10 @@ a:pinv(opts?)          -- Moore-Penrose pseudoinverse; opts.atol/rtol
 a:matrix_exp()         -- matrix exponential of square/batched matrices
 a:matrix_power(n)      -- integer power; negative n inverts (floating only)
 a:diagonal(offset?, dim1?, dim2?)  -- diagonal over two dimensions
+a:tril(diagonal?)                 -- lower triangle; 0-based diagonal offset
+a:triu(diagonal?)                 -- upper triangle; 0-based diagonal offset
+a:trace()                         -- sum of the main diagonal of a 2-D matrix
+a:diag(diagonal?)                 -- extract from a matrix or build from a vector
 a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
 a:cross(other, dim?)               -- 3-vector cross product along one dimension
 a:vecdot(other, dim?)              -- batched vector dot along one dimension
@@ -361,7 +365,7 @@ torch.linalg.inv(a)      torch.linalg.inv_ex(a, opts?)
 torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
-torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.solve(a, b, opts?)  torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.cholesky_inverse(a, upper?)  -- inverse from a Cholesky factor
 torch.cholesky_solve(b, factor, upper?)   -- solve from a Cholesky factor
 torch.linalg.solve_ex(a, b, opts?)  -- solution plus int32 info
@@ -380,6 +384,8 @@ torch.linalg.ldl_solve(ld, pivots, b, opts?)  -- solve from an LDL factor
 torch.lu_unpack(lu, pivots, opts?)
 torch.linalg.lu_unpack(lu, pivots, opts?)  -- alias of torch.lu_unpack
 torch.diagonal(a, offset?, dim1?, dim2?)
+torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
+torch.trace(a) / torch.diag(a, diagonal?)
 torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
 torch.cross(a, b, dim?)                   -- default dim is the last dimension
 torch.linalg.diagonal(a, offset?, dim1?, dim2?)  -- last two dims by default
@@ -546,6 +552,21 @@ so it stays finite for very large or small magnitudes. `sign` is `-1`, `0`, or
 `1`; `logabsdet` is real. For a square matrix `exp(logabsdet) * sign == det`,
 and gradients flow through `logabsdet` as `A^{-T}`. Batched inputs return
 `sign` and `logabsdet` with the batch dimensions; square matrices are required.
+
+`solve` solves `A X = B` by default. Pass `{ left = false }` to solve
+`X A = B`: the right-hand side must then have at least two dimensions with
+shape `(*, k, n)`, and the result has the same shape. The right solve is
+computed through a transposed left solve, so it stays differentiable with
+respect to both the matrix and the right-hand side. Vector right-hand sides are
+accepted only for left solves:
+
+```lua
+local a = torch.tensor({{2, 0}, {1, 3}}, {dtype = torch.float64})
+local b = torch.tensor({{2, 4}}, {dtype = torch.float64})
+print(a:solve(b, { left = false }):totable())   -- {{0.3333, 1.3333}}
+print(torch.linalg.solve(a, b, { left = false }):allclose(
+  a:solve(b, { left = false })))
+```
 
 `solve_ex` is the error-reporting form of `solve`. It returns the solution and
 an int32 `info` tensor whose entries are zero on success or positive when the
@@ -787,6 +808,42 @@ local a = torch.tensor({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
   {dtype = torch.float64})
 print(a:diagonal(1):totable())      -- {2, 6}
 print(a:diagonal(-1):totable())     -- {4, 8}
+```
+
+`tril` and `triu` return the lower or upper triangular part of a matrix or
+batch of matrices, zeroing the opposite half. `diagonal` defaults to `0` (the
+main diagonal), is positive above it and negative below it. The mask broadcasts
+over batch dimensions, every dtype is accepted (integer and bool entries are
+zeroed with the dtype's zero), and the result is differentiable with zero
+gradient in the zeroed half. Inputs must have at least two dimensions:
+
+```lua
+local a = torch.tensor({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
+  {dtype = torch.float64})
+print(a:tril())       -- [[1, 0, 0], [4, 5, 0], [7, 8, 9]]
+print(a:triu(1))      -- [[0, 2, 3], [0, 0, 6], [0, 0, 0]]
+print(torch.tril(a):allclose(a:tril()))
+```
+
+`trace` sums the main diagonal of a 2-D matrix and returns a 0-dim tensor. It
+is differentiable and accepts integer and floating dtypes:
+
+```lua
+print(torch.tensor({{1, 2}, {3, 4}}):trace():item())   -- 5
+```
+
+`diag` mirrors `torch.diag`. For a 2-D input it extracts a diagonal and returns
+a 1-D tensor; for a 1-D input it builds a square matrix with the vector on the
+requested diagonal, padding with zeros. The `diagonal` argument uses the same
+0-based convention as `tril`/`triu`, and both directions are differentiable.
+One-dimensional construction accepts every dtype, including bool; two-
+dimensional extraction follows `diagonal` and accepts integer and floating
+dtypes:
+
+```lua
+local v = torch.tensor({1, 2, 3}, {dtype = torch.float64})
+print(v:diag(1))      -- a 4x4 matrix with 1, 2, 3 above the main diagonal
+print(v:diag():trace():item())  -- 6
 ```
 
 `vander` builds a Vandermonde matrix. `torch.linalg.vander(x, N?)` accepts any
@@ -1273,6 +1330,8 @@ torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / ga
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
 torch.ger(a, b)                  -- outer product of two vectors
+torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
+torch.trace(a) / torch.diag(a, diagonal?)
 torch.einsum(equation, ...)      -- validated Einstein summation
 torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
@@ -1282,6 +1341,7 @@ torch.linalg.matmul(a, b) / mm(a, b) / mv(a, b) / outer(a, b)
 torch.linalg.matrix_norm(a, ord?, dim1?, dim2?, keepdim?)
                                   -- fro, nuc, 2, -2, 1, -1, inf, -inf
 torch.linalg.norm(a, ord?, dim?, keepdim?)  -- vector/matrix norm dispatcher
+torch.linalg.solve(a, b, opts?)  -- solve A x = b; opts.left=false for x A = b
 torch.linalg.solve_ex(a, b, opts?)  -- solution plus int32 info
 torch.linalg.lu_factor_ex(a, opts?)  -- packed LU, pivots, plus int32 info
 torch.linalg.ldl_factor(a, opts?) / torch.linalg.ldl_factor_ex(a, opts?)
@@ -1309,6 +1369,6 @@ torch.linalg.multi_dot({a, b, ...})
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.32.0")
+torch.VERSION             -- luatorch version string ("0.33.0")
 torch.version             -- libtorch version string
 ```
