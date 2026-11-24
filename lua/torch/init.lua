@@ -1165,6 +1165,13 @@ function torch.cholesky_inverse(a, upper)
   return a:cholesky_inverse(upper)
 end
 
+function torch.cholesky_solve(b, factor, upper)
+  if not Tensor.is_tensor(b) then
+    error("torch.cholesky_solve expects a right-hand side tensor", 2)
+  end
+  return b:cholesky_solve(factor, upper)
+end
+
 function torch.lu_unpack(lu, pivots, opts)
   if not Tensor.is_tensor(lu) then
     error("torch.lu_unpack expects a packed LU tensor", 2)

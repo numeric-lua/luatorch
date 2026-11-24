@@ -329,6 +329,7 @@ a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
 a:cholesky_inverse(upper?)  -- inverse from a Cholesky factor
+b:cholesky_solve(factor, upper?)  -- solve A x = b from a Cholesky factor
 a:cholesky_ex(opts?)   -- factor plus int32 info; opts.upper/check_errors
 a:eigh(uplo?)          -- real symmetric eigenvalues (ascending) and vectors
 a:eigvalsh(uplo?)      -- real symmetric eigenvalues only
@@ -358,6 +359,7 @@ torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
 torch.linalg.cholesky_inverse(a, upper?)  -- inverse from a Cholesky factor
+torch.cholesky_solve(b, factor, upper?)   -- solve from a Cholesky factor
 torch.linalg.solve_ex(a, b, opts?)  -- solution plus int32 info
 torch.linalg.cholesky_ex(a, opts?)
 torch.linalg.eigh(a, uplo?)  torch.linalg.eigvalsh(a, uplo?)
@@ -477,6 +479,24 @@ print(inverse:allclose(a:inverse()))  -- true
 `torch.cholesky_inverse(a, upper?)` is the top-level alias. Only float32 and
 float64 are accepted; sub-2-D, non-square, half, integer, and bool inputs are
 rejected by the Lua layer.
+
+`cholesky_solve` solves `A X = B` from a Cholesky factor of `A`. The method is
+called on the right-hand side `B`: `B:cholesky_solve(L)` uses the lower factor
+of `A = L L^T`, while `B:cholesky_solve(U, true)` uses the upper factor of
+`A = U^T U`. `B` has shape `(*, n, k)`, so a single right-hand side is a
+column matrix, and its batch dimensions may broadcast over the factor. Both
+operands must share float32/float64 dtype, and the solution is differentiable:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local b = torch.tensor({{1}, {2}}, {dtype = torch.float64})
+local x = torch.cholesky_solve(b, a:cholesky())
+print(x:allclose(a:solve(b)))         -- true
+```
+
+`torch.cholesky_solve(b, factor, upper?)` is the top-level alias. CPU LAPACK
+has no half-precision kernel, so float16, integer, and bool right-hand sides
+or factors are rejected.
 
 `eigh` computes the eigenvalues and eigenvectors of real symmetric matrices
 or batches of symmetric matrices. It reads the lower triangle by default;
@@ -1156,6 +1176,7 @@ torch.linalg.ldl_factor(a, opts?) / torch.linalg.ldl_factor_ex(a, opts?)
 torch.linalg.ldl_solve(ld, pivots, b, opts?)  -- solve from an LDL factor
 torch.linalg.cholesky_ex(a, opts?)  -- factor plus int32 info
 torch.linalg.cholesky_inverse(a, upper?)  -- inverse from a Cholesky factor
+torch.cholesky_solve(b, factor, upper?)   -- solve from a Cholesky factor
 torch.linalg.eigh(a, uplo?) / torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.inv_ex(a, opts?)    -- inverse plus int32 info
 torch.linalg.cond(a, p?)         -- 2, 1, inf, fro

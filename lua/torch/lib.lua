@@ -159,6 +159,8 @@ lt_tensor* lt_linalg_solve_triangular(lt_tensor* a, lt_tensor* b,
                                       int unitriangular);
 lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper);
 lt_tensor* lt_linalg_cholesky_inverse(lt_tensor* a, int upper);
+lt_tensor* lt_linalg_cholesky_solve(lt_tensor* b, lt_tensor* factor,
+                                    int upper);
 int lt_linalg_cholesky_ex(lt_tensor* a, int upper, int check_errors,
                           lt_tensor** L, lt_tensor** info);
 int lt_linalg_eigh(lt_tensor* a, const char* uplo,

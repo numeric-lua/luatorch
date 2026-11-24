@@ -1674,6 +1674,43 @@ function Tensor:cholesky_inverse(upper)
   return wrap(lib.lt_linalg_cholesky_inverse(self.h, upper and 1 or 0))
 end
 
+-- Solve A X = B from the Cholesky factor of A. `self` is B with shape
+-- (*, n, k); `other` is the lower factor L of A = L L^T by default, or the
+-- upper factor U of A = U^T U when upper is true. Batch dimensions of B may
+-- broadcast over the factor. Both operands must share float32/float64 dtype,
+-- and the solution is differentiable.
+function Tensor:cholesky_solve(other, upper)
+  if not is_tensor(other) then
+    error("cholesky_solve expects a Cholesky factor tensor", 3)
+  end
+  if self:dim() < 2 then
+    error("cholesky_solve expects a right-hand side with at least 2 " ..
+      "dimensions", 3)
+  end
+  if other:dim() < 2 then
+    error("cholesky_solve expects a matrix or a batch of matrices", 3)
+  end
+  if other:size(-2) ~= other:size(-1) then
+    error("cholesky_solve expects square Cholesky factors", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("cholesky_solve supports float32 and float64 tensors", 3)
+  end
+  if other:dtype_id() ~= self:dtype_id() then
+    error("cholesky_solve expects the factor to match the right-hand side " ..
+      "dtype", 3)
+  end
+  if self:size(-2) ~= other:size(-1) then
+    error("cholesky_solve right-hand side has the wrong number of rows", 3)
+  end
+  if upper ~= nil and type(upper) ~= "boolean" then
+    error("cholesky_solve upper must be a boolean", 3)
+  end
+  return wrap(lib.lt_linalg_cholesky_solve(self.h, other.h,
+    upper and 1 or 0))
+end
+
 local cholesky_ex_options = {
   upper = true,
   check_errors = true,

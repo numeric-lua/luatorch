@@ -926,6 +926,112 @@ test("cholesky_inverse validates shapes, dtypes, and upper", function()
   end, "expects a tensor")
 end)
 
+test("cholesky_solve solves systems from a Cholesky factor", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local rhs = float_matrix({ { 1 }, { 2 } })
+  local expected = matrix:solve(rhs)
+
+  local lower = matrix:cholesky()
+  local lower_solution = rhs:cholesky_solve(lower)
+  assert_shape(lower_solution, { 2, 1 })
+  assert_dtype(lower_solution, "float64")
+  assert_tensor(lower_solution, expected:totable(), 1e-12)
+  assert_tensor(torch.cholesky_solve(rhs, lower), expected:totable(), 1e-12)
+
+  local upper = matrix:cholesky(true)
+  local upper_solution = rhs:cholesky_solve(upper, true)
+  assert_tensor(upper_solution, expected:totable(), 1e-12)
+  assert_tensor(torch.cholesky_solve(rhs, upper, true),
+    expected:totable(), 1e-12)
+
+  local multiple = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_tensor(rhs:cholesky_solve(lower),
+    matrix:solve(rhs):totable(), 1e-12)
+  assert_tensor(multiple:cholesky_solve(lower),
+    matrix:solve(multiple):totable(), 1e-12)
+  assert_dtype(rhs:float():cholesky_solve(lower:float()), "float32")
+end)
+
+test("cholesky_solve handles batches and gradients", function()
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 2, 1 }, { 1, 2 } },
+  }, { dtype = torch.float64 })
+  local factors = batch:cholesky()
+  local shared = float_matrix({ { 1 }, { 2 } })
+  local shared_solution = shared:cholesky_solve(factors)
+  assert_shape(shared_solution, { 2, 2, 1 })
+  for i = 1, 2 do
+    assert_tensor(shared_solution:select(1, i),
+      batch:select(1, i):solve(shared):totable(), 1e-12)
+  end
+
+  local batch_rhs = torch.tensor({
+    { { 1 }, { 2 } },
+    { { 3 }, { 4 } },
+  }, { dtype = torch.float64 })
+  local batch_solution = batch_rhs:cholesky_solve(factors)
+  assert_shape(batch_solution, { 2, 2, 1 })
+  assert_tensor(batch_solution, batch:solve(batch_rhs):totable(), 1e-12)
+
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local lower = matrix:cholesky()
+  local weights = float_matrix({ { 1.5 }, { -0.5 } })
+  local rhs_values = { { 1.0 }, { 2.0 } }
+  local rhs = torch.tensor(rhs_values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local loss = (rhs:cholesky_solve(lower) * weights):sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(i, delta)
+    local copy = { { rhs_values[1][1] }, { rhs_values[2][1] } }
+    copy[i][1] = copy[i][1] + delta
+    local perturbed = torch.tensor(copy, { dtype = torch.float64 })
+    return (perturbed:cholesky_solve(lower) * weights):sum():item()
+  end
+  for i = 1, 2 do
+    assert_near(rhs:grad():get(i, 1),
+      (numeric(i, eps) - numeric(i, -eps)) / (2 * eps), 1e-5,
+      string.format("d cholesky_solve loss / d B[%d]", i))
+  end
+end)
+
+test("cholesky_solve validates factors, shapes, and dtypes", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local lower = matrix:cholesky()
+  local rhs = float_matrix({ { 1 }, { 2 } })
+  assert_error(function()
+    rhs:cholesky_solve({ 1, 2 })
+  end, "factor tensor")
+  assert_error(function()
+    torch.ones(2, { dtype = torch.float64 }):cholesky_solve(lower)
+  end, "at least 2 dimensions")
+  assert_error(function()
+    rhs:cholesky_solve(torch.ones(3, { dtype = torch.float64 }))
+  end, "matrix or a batch")
+  assert_error(function()
+    rhs:cholesky_solve(torch.ones(2, 3, { dtype = torch.float64 }))
+  end, "square Cholesky factors")
+  assert_error(function()
+    torch.ones(2, 1, { dtype = torch.int64 }):cholesky_solve(lower)
+  end, "float32 and float64")
+  assert_error(function()
+    rhs:cholesky_solve(lower:float())
+  end, "match the right-hand side dtype")
+  assert_error(function()
+    float_matrix({ { 1 }, { 2 }, { 3 } }):cholesky_solve(lower)
+  end, "wrong number of rows")
+  assert_error(function()
+    rhs:cholesky_solve(lower, 1)
+  end, "upper must be a boolean")
+  assert_error(function()
+    torch.cholesky_solve({ 1, 2 }, lower)
+  end, "right-hand side tensor")
+end)
+
 test("inv_ex inverts matrices and returns info", function()
   local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
   local inverse, info = torch.linalg.inv_ex(matrix)

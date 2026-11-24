@@ -39,7 +39,7 @@ test("documented public functions exist", function()
   local api = read("docs/api.md")
   for _, name in ipairs({ "einsum", "isnan", "isinf", "isfinite", "from_blob",
       "trapezoid", "lu_unpack", "diagonal", "vander", "cross",
-      "cholesky_inverse" }) do
+      "cholesky_inverse", "cholesky_solve" }) do
     assert_true(api:find("torch." .. name, 1, true) ~= nil,
       "docs/api.md does not mention torch." .. name)
     assert_eq(type(torch[name]), "function", "torch." .. name .. " is missing")
