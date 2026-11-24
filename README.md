@@ -307,9 +307,13 @@ See [docs/profiler.md](docs/profiler.md) for scope and limitations.
 
 ## Status
 
-> **0.33.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
+> **0.34.0 alpha**, CPU. Tensor core, autograd, I/O, luafun, `nn`/`optim`,
 > data loading, sorting/linalg, the fusion JIT, fused optimizer updates,
-> first-order fused backward, fused reductions, and **542 tests**. The 0.33
+> first-order fused backward, fused reductions, and **557 tests**. The 0.34
+> additions are `torch.diag_embed`, `torch.diagflat`,
+> `torch.tril_indices`/`triu_indices`, `torch.tensordot`, and the `rtol`
+> options form of `torch.linalg.matrix_rank`, with autograd, tests, and docs.
+> The 0.33
 > additions are `torch.tril`/`triu`, `torch.trace`, `torch.diag`, and the
 > `left=false` (right-side) option on `torch.linalg.solve`, with broadcasting,
 > autograd, tests, and docs. The 0.32
@@ -431,7 +435,7 @@ fast fusion backend; without it, fusion falls back to LuaJIT loops.
 ```bash
 scripts/fetch_libtorch.sh     # downloads ~170 MB into third_party/libtorch
 scripts/build.sh              # builds build/libluatorch.so
-scripts/test.sh               # 542 tests
+scripts/test.sh               # 557 tests
 scripts/bench.sh              # micro-benchmarks
 scripts/repl.sh               # interactive REPL
 ```
@@ -477,7 +481,7 @@ LuaJIT backend; `gcc` unavailable → automatic fallback.
 | Math | `+ - * / ^ %`, broadcasting, ~25 unary ops, `matmul/mm/bmm/dot`, `mv`, `outer`, `addmm`, `baddbmm`, comparisons, `where`, masks, `isclose`, `nan_to_num` |
 | Reductions | `sum`, `mean`, `prod`, `max`/`min`/`aminmax`, `count_nonzero`, `argmax`/`argmin`, `var`/`std`, `norm`, `logsumexp`, `all`/`any` |
 | Sorting | `sort`, `topk`, `unique`, `nonzero`, `gather`, `scatter` |
-| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_ex`, `solve_triangular`, `lu`, `lu_factor`, `lu_factor_ex`, `lu_solve`, `lu_unpack`, `ldl_factor`, `ldl_factor_ex`, `ldl_solve`, `pinv`, `matrix_exp`, `diagonal`, `tril`, `triu`, `trace`, `diag`, `vander`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_inverse`, `cholesky_solve`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `matrix_rank`, `cond`, `qr`, `torch.linalg.*` |
+| Linear algebra | `inverse`, `inv_ex`, `det`, `solve`, `solve_ex`, `solve_triangular`, `lu`, `lu_factor`, `lu_factor_ex`, `lu_solve`, `lu_unpack`, `ldl_factor`, `ldl_factor_ex`, `ldl_solve`, `pinv`, `matrix_exp`, `diagonal`, `tril`, `triu`, `trace`, `diag`, `diag_embed`, `diagflat`, `tril_indices`, `triu_indices`, `vander`, `tensordot`, `cross`, `vecdot`, `multi_dot`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `householder_product`, `lstsq`, `cholesky`, `cholesky_inverse`, `cholesky_solve`, `cholesky_ex`, `eigh`, `eigvalsh`, `norm`, `matrix_norm`, `matrix_rank`, `cond`, `qr`, `torch.linalg.*` |
 | Autograd | `requires_grad`, `backward`, `grad`, `detach`, `no_grad` |
 | Neural nets | Linear, Conv2d, pooling, BatchNorm/LayerNorm, Embedding, Dropout, activations, losses, Sequential/ModuleList |
 | Optimizers | SGD/Adam/AdamW/RMSprop/Adagrad fused update kernels, fused gradient clipping, LR schedulers |

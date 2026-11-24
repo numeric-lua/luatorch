@@ -1,4 +1,4 @@
-# luatorch API reference (0.33.0)
+# luatorch API reference (0.34.0)
 
 All examples assume:
 
@@ -353,6 +353,7 @@ a:tril(diagonal?)                 -- lower triangle; 0-based diagonal offset
 a:triu(diagonal?)                 -- upper triangle; 0-based diagonal offset
 a:trace()                         -- sum of the main diagonal of a 2-D matrix
 a:diag(diagonal?)                 -- extract from a matrix or build from a vector
+a:diag_embed(diagonal?)           -- embed the last dimension on a new diagonal
 a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
 a:cross(other, dim?)               -- 3-vector cross product along one dimension
 a:vecdot(other, dim?)              -- batched vector dot along one dimension
@@ -386,6 +387,10 @@ torch.linalg.lu_unpack(lu, pivots, opts?)  -- alias of torch.lu_unpack
 torch.diagonal(a, offset?, dim1?, dim2?)
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
 torch.trace(a) / torch.diag(a, diagonal?)
+torch.diag_embed(a, diagonal?) / torch.diagflat(a, diagonal?)
+torch.tril_indices(row, col, diagonal?, opts?)
+torch.triu_indices(row, col, diagonal?, opts?)
+torch.tensordot(a, b, dims?)
 torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
 torch.cross(a, b, dim?)                   -- default dim is the last dimension
 torch.linalg.diagonal(a, offset?, dim1?, dim2?)  -- last two dims by default
@@ -846,6 +851,37 @@ print(v:diag(1))      -- a 4x4 matrix with 1, 2, 3 above the main diagonal
 print(v:diag():trace():item())  -- 6
 ```
 
+`diag_embed` is the batched construction form: for an input of shape `(*, n)`
+it returns `(*, size, size)` with `size = n + |offset|`, placing each vector on
+the requested diagonal and padding with zeros. The offset is 0-based and the
+leading dimensions are treated as batch dimensions; 1-D, 2-D, empty, integer,
+and bool inputs are supported, and the result is differentiable. Only the last
+two output dimensions are used:
+
+```lua
+local batch = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
+print(batch:diag_embed())    -- two 2x2 diagonal matrices
+print(torch.diag_embed(batch, -1):sizes())  -- {2, 3, 3}
+```
+
+`torch.diagflat(a, diagonal?)` flattens its input and builds a 2-D diagonal
+matrix from the resulting vector, so `torch.diagflat(batch)` produces one
+4x4 matrix for a 2x2 input.
+
+`tril_indices(row, col, diagonal?, opts?)` and
+`triu_indices(row, col, diagonal?, opts?)` return the coordinates of the
+selected triangle as a `2 x N` integer tensor in row-major order. Coordinates
+are **1-based**, matching the rest of the Lua surface (PyTorch returns
+0-based coordinates). The offset defaults to 0, and `opts.dtype` selects the
+output dtype (default `int64`; `opts.device` must be `"cpu"`):
+
+```lua
+print(torch.tril_indices(3, 3):totable())
+-- {{1, 2, 2, 3, 3, 3}, {1, 1, 2, 1, 2, 3}}
+print(torch.triu_indices(3, 3, 1):totable())
+-- {{1, 1, 2}, {2, 3, 3}}
+```
+
 `vander` builds a Vandermonde matrix. `torch.linalg.vander(x, N?)` accepts any
 rank, uses `N = x:size(-1)` by default, and appends the powers
 `x^0 .. x^(N-1)` (increasing order). `torch.vander(x, N?, increasing?)`
@@ -934,17 +970,21 @@ print(torch.linalg.cond(a, "nuc"):totable()) -- {4.5, 4}
 a matrix or batch of matrices. The default tolerance is
 `max(m, n) * eps(dtype) * largest singular value`; a numeric `tol` is used as
 an absolute cutoff, so singular values strictly greater than `tol` count.
-`hermitian = true` requires square input and uses the absolute eigenvalues of
-the real symmetric matrix instead of its singular values. A plain 2-D input
-still returns the historical Lua number, while batched inputs return an
-`int64` tensor with the batch shape. Only float32 and float64 are accepted,
-matching the SVD and symmetric-eigenvalue CPU paths:
+Alternatively pass an options table:
+`torch.linalg.matrix_rank(a, { tol = t, rtol = r, hermitian = h })`. `rtol`
+uses the relative cutoff `rtol * largest`; supplying both `tol` and `rtol` is
+an error. `hermitian = true` requires square input and uses the absolute
+eigenvalues of the real symmetric matrix instead of its singular values. A
+plain 2-D input still returns the historical Lua number, while batched inputs
+return an `int64` tensor with the batch shape. Only float32 and float64 are
+accepted, matching the SVD and symmetric-eigenvalue CPU paths:
 
 ```lua
 local a = torch.tensor({{{1, 0}, {0, 1}}, {{1, 1}, {1, 1}}},
   {dtype = torch.float64})
 print(torch.linalg.matrix_rank(a):totable())          -- {2, 1}
 print(torch.linalg.matrix_rank(a, 1e-12, true):totable())  -- {2, 1}
+print(torch.linalg.matrix_rank(a, { rtol = 1e-6 }):totable())  -- {2, 1}
 ```
 
 `torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with a
@@ -959,6 +999,21 @@ is the mathematically identical chain product, and autograd flows through every
 local a = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
 local b = torch.tensor({{5, 6}, {7, 8}}, {dtype = torch.float64})
 print(torch.linalg.multi_dot({a, b}):totable())  -- {{19, 22}, {43, 50}}
+```
+
+`torch.tensordot(a, b, dims?)` contracts tensor dimensions. An integer `dims`
+(default 2) contracts the last `dims` dimensions of `a` with the first `dims`
+of `b`; a `{a_dims, b_dims}` pair selects arbitrary (including negative)
+dimensions. The paired dimensions must have equal sizes, both operands must
+share one dtype, and the free dimensions appear in the result in input order:
+`a`'s free dimensions followed by `b`'s. The contraction is a
+permute/reshape/matmul, so autograd flows to both operands:
+
+```lua
+local a = torch.tensor({{1, 2}, {3, 4}}, {dtype = torch.float64})
+local b = torch.tensor({{5, 6}, {7, 8}}, {dtype = torch.float64})
+print(torch.tensordot(a, b, 1):totable())   -- {{19, 22}, {43, 50}}
+print(torch.tensordot(a, b, 0):sizes())     -- {2, 2, 2, 2} (outer product)
 ```
 
 ### Einstein summation
@@ -1332,6 +1387,10 @@ torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
 torch.ger(a, b)                  -- outer product of two vectors
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
 torch.trace(a) / torch.diag(a, diagonal?)
+torch.diag_embed(a, diagonal?) / torch.diagflat(a, diagonal?)
+torch.tril_indices(row, col, diagonal?, opts?)
+torch.triu_indices(row, col, diagonal?, opts?)
+torch.tensordot(a, b, dims?)
 torch.einsum(equation, ...)      -- validated Einstein summation
 torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
@@ -1353,6 +1412,7 @@ torch.linalg.eigh(a, uplo?) / torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.inv_ex(a, opts?)    -- inverse plus int32 info
 torch.linalg.cond(a, p?)         -- 2, -2, 1, -1, inf, -inf, fro, nuc
 torch.linalg.matrix_rank(a, tol?, hermitian?)
+torch.linalg.matrix_rank(a, { tol = t, rtol = r, hermitian = h })
                                   -- batched int64 ranks; 2-D returns a number
 torch.linalg.matrix_power(a, n)  -- integer matrix power
 torch.linalg.vector_norm(a, ord?, dim?, keepdim?)
@@ -1369,6 +1429,6 @@ torch.linalg.multi_dot({a, b, ...})
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.33.0")
+torch.VERSION             -- luatorch version string ("0.34.0")
 torch.version             -- libtorch version string
 ```

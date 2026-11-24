@@ -2680,6 +2680,45 @@ function Tensor:diag(diagonal)
   return columns:masked_fill(keep:logical_not(), 0)
 end
 
+-- Embed the last dimension of a tensor on a diagonal of two new trailing
+-- dimensions. Inputs of shape (*, n) produce (*, size, size) with
+-- size = n + |offset|; leading dimensions are treated as batch dimensions.
+-- The construction uses a padded column broadcast against a diagonal mask, so
+-- it stays differentiable with respect to the input.
+function Tensor:diag_embed(diagonal)
+  if self:dim() < 1 then
+    error("diag_embed expects a tensor with at least one dimension", 3)
+  end
+  diagonal = diagonal_offset(diagonal, "diag_embed")
+  local count = self:size(-1)
+  local size = count + math.abs(diagonal)
+  local dtype = self:dtype_id()
+  local batch_shape = {}
+  for i = 1, self:dim() - 1 do
+    batch_shape[i] = self:size(i)
+  end
+  local out_shape = {}
+  for i = 1, #batch_shape do out_shape[i] = batch_shape[i] end
+  out_shape[#out_shape + 1] = size
+  out_shape[#out_shape + 1] = size
+  if count == 0 then
+    return zeros_tensor(out_shape, dtype)
+  end
+  local padding_shape = {}
+  for i = 1, #batch_shape do padding_shape[i] = batch_shape[i] end
+  padding_shape[#padding_shape + 1] = math.abs(diagonal)
+  local padding = zeros_tensor(padding_shape, dtype)
+  local padded
+  if diagonal >= 0 then
+    padded = cat_tensors({ self, padding }, self:dim() - 1)
+  else
+    padded = cat_tensors({ padding, self }, self:dim() - 1)
+  end
+  local columns = padded:unsqueeze(-1):expand(unpack(out_shape))
+  local keep = offset_grid(size, size):eq(diagonal)
+  return columns:masked_fill(keep:logical_not(), 0)
+end
+
 function Tensor:mv(vector)
   return wrap(lib.lt_mv(self.h, vector.h))
 end

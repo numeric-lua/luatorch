@@ -1,3 +1,40 @@
+# luatorch 0.34.0
+
+- five real-valued linalg/API gaps are covered: `diag_embed`, `diagflat`,
+  `tril_indices`/`triu_indices`, `tensordot`, and the `rtol` options form of
+  `torch.linalg.matrix_rank`;
+- `torch.diag_embed` / `Tensor:diag_embed(diagonal?)` embeds the last
+  dimension of an input of shape `(*, n)` on a diagonal of two new trailing
+  dimensions, returning `(*, size, size)` with `size = n + |offset|`. The
+  0-based offset defaults to 0, leading dimensions are batch dimensions,
+  empty/1-D/2-D/integer/bool inputs are supported, and gradients flow to the
+  embedded vector;
+- `torch.diagflat(input, diagonal?)` flattens its input and builds a 2-D
+  diagonal matrix, with autograd and the same offset convention as `diag`;
+- `torch.tril_indices(row, col, diagonal?, opts?)` and
+  `torch.triu_indices(row, col, diagonal?, opts?)` return the selected
+  triangle's coordinates as a `2 x N` integer tensor in row-major order.
+  Coordinates are 1-based to match the Lua surface; `opts.dtype` selects the
+  output dtype (default int64) and `opts.device` must be `"cpu"`;
+- `torch.tensordot(a, b, dims?)` contracts the last `dims` dimensions of `a`
+  with the first `dims` of `b`, or arbitrary dimensions via a
+  `{a_dims, b_dims}` pair. Paired dimensions must match, both operands must
+  share one dtype, free dimensions keep their order, and autograd flows
+  through the permute/reshape/matmul implementation;
+- `torch.linalg.matrix_rank` accepts an options table
+  `{ tol = t, rtol = r, hermitian = h }`; `rtol` uses `rtol * largest` while
+  `tol` is absolute, and supplying both is an error. The historical numeric
+  tolerance and boolean hermitian arguments keep working, and batches still
+  return int64 tensors;
+- 15 tests in `tests/test_linalg_build.lua` cover embedded diagonals, batches,
+  bool/empty inputs, triangle coordinates and offsets, tensordot shapes and
+  explicit/negative dimensions, autograd for construction and contraction, and
+  `matrix_rank` tolerance options; the suite is now **557 tests** and
+  `./scripts/test.sh` is green;
+- docs, docs guards, README status/feature table/build count, roadmap,
+  CHANGELOG, and the `0.34.0` rockspec are updated. Every change is pure Lua:
+  no C++ shim or FFI declaration changed.
+
 # luatorch 0.33.0
 
 - five real-valued linalg/API gaps are covered: `tril`, `triu`, `trace`,

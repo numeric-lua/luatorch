@@ -22,7 +22,7 @@ local fun = require("fun")
 
 local torch = {}
 
-torch.VERSION = "0.33.0"
+torch.VERSION = "0.34.0"
 torch.version = libmod.version
 torch.__version = libmod.version
 torch.Tensor = Tensor
@@ -903,14 +903,18 @@ end
 -- Count singular values (or absolute eigenvalues for hermitian inputs) above
 -- a threshold. The default threshold follows PyTorch's rank convention:
 -- max(m, n) * eps(dtype) * largest value. A supplied tol is used as an
--- absolute cutoff.
-local function matrix_rank_values(values, tol, rows, columns, dtype)
+-- absolute cutoff and a supplied rtol as rtol * largest.
+local function matrix_rank_values(values, tol, rows, columns, dtype, rtol)
   local largest = 0
   for i = 1, #values do
     if values[i] > largest then largest = values[i] end
   end
-  local threshold = tol
-  if threshold == nil then
+  local threshold
+  if rtol ~= nil then
+    threshold = rtol * largest
+  elseif tol ~= nil then
+    threshold = tol
+  else
     local epsilon = dtype == "float32" and 1.1920929e-7 or
       2.220446049250313e-16
     threshold = math.max(rows, columns) * epsilon * largest
@@ -926,7 +930,7 @@ end
 -- keeps the historical Lua-number result; batches return an int64 tensor with
 -- the batch shape. hermitian=true uses absolute eigenvalues of a real
 -- symmetric square matrix instead of the SVD.
-local function matrix_rank_tensor(a, tol, hermitian)
+local function matrix_rank_tensor(a, tol, hermitian, rtol)
   if not Tensor.is_tensor(a) then
     error("matrix_rank expects a tensor", 3)
   end
@@ -944,6 +948,13 @@ local function matrix_rank_tensor(a, tol, hermitian)
       tol == math.huge) then
     error("matrix_rank tol must be a non-negative finite number", 3)
   end
+  if rtol ~= nil and (type(rtol) ~= "number" or rtol ~= rtol or rtol < 0 or
+      rtol == math.huge) then
+    error("matrix_rank rtol must be a non-negative finite number", 3)
+  end
+  if tol ~= nil and rtol ~= nil then
+    error("matrix_rank accepts either tol or rtol, not both", 3)
+  end
   local rows, columns = a:size(-2), a:size(-1)
   if hermitian and rows ~= columns then
     error("matrix_rank hermitian=true expects square matrices", 3)
@@ -957,7 +968,8 @@ local function matrix_rank_tensor(a, tol, hermitian)
   end
 
   if a:dim() == 2 then
-    return matrix_rank_values(values:totable(), tol, rows, columns, dtype)
+    return matrix_rank_values(values:totable(), tol, rows, columns, dtype,
+      rtol)
   end
 
   local batch_shape = {}
@@ -975,7 +987,7 @@ local function matrix_rank_tensor(a, tol, hermitian)
   local ranks = {}
   for i = 1, batch_count do
     ranks[i] = matrix_rank_values(flat:select(1, i):totable(), tol,
-      rows, columns, dtype)
+      rows, columns, dtype, rtol)
   end
   return torch.tensor(ranks, { dtype = torch.int64 }):reshape(batch_shape)
 end
@@ -1200,6 +1212,18 @@ torch.linalg = {
     return result
   end,
   matrix_rank = function(a, tol, hermitian)
+    if type(tol) == "table" then
+      if hermitian ~= nil then
+        error("matrix_rank options table cannot be combined with the " ..
+          "hermitian argument", 3)
+      end
+      for key in pairs(tol) do
+        if key ~= "tol" and key ~= "rtol" and key ~= "hermitian" then
+          error("matrix_rank got unknown option '" .. tostring(key) .. "'", 3)
+        end
+      end
+      return matrix_rank_tensor(a, tol.tol, tol.hermitian, tol.rtol)
+    end
     return matrix_rank_tensor(a, tol, hermitian)
   end,
   matrix_norm = function(a, ord, dim1, dim2, keepdim)
@@ -1310,6 +1334,109 @@ function torch.linalg.multi_dot(tensors)
   return result
 end
 
+-- Contract the last `dims` dimensions of `a` with the first `dims` of `b`,
+-- or the dimensions named by a {a_dims, b_dims} pair. Free dimensions keep
+-- their order in the result: a's free dimensions followed by b's. The
+-- contraction is a permute/reshape/matmul, so autograd works throughout.
+function torch.tensordot(a, b, dims)
+  if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+    error("tensordot expects two tensors", 3)
+  end
+  if a:dim() < 1 or b:dim() < 1 then
+    error("tensordot expects tensors with at least one dimension", 3)
+  end
+  if a:dtype_id() ~= b:dtype_id() then
+    error("tensordot expects both tensors to share a dtype", 3)
+  end
+  if dims == nil then dims = 2 end
+
+  local a_dims, b_dims = {}, {}
+  if type(dims) == "number" then
+    if dims ~= dims or dims % 1 ~= 0 or dims < 0 or dims == math.huge then
+      error("tensordot dims must be a non-negative integer", 3)
+    end
+    dims = math.floor(dims)
+    if dims > a:dim() or dims > b:dim() then
+      error("tensordot dims exceeds the rank of an input", 3)
+    end
+    for i = 1, dims do
+      a_dims[i] = a:dim() - dims + i
+      b_dims[i] = i
+    end
+  elseif type(dims) == "table" then
+    if #dims ~= 2 or type(dims[1]) ~= "table" or
+        type(dims[2]) ~= "table" then
+      error("tensordot dims must be an integer or a {a_dims, b_dims} pair", 3)
+    end
+    if #dims[1] ~= #dims[2] then
+      error("tensordot dims lists must have the same length", 3)
+    end
+    for i = 1, #dims[1] do
+      a_dims[i] = linalg_dim(dims[1][i], a:dim(), "tensordot")
+      b_dims[i] = linalg_dim(dims[2][i], b:dim(), "tensordot")
+    end
+  else
+    error("tensordot dims must be an integer or a table", 3)
+  end
+
+  local a_seen, b_seen = {}, {}
+  for i = 1, #a_dims do
+    if a_seen[a_dims[i]] then
+      error("tensordot a_dims must not repeat dimensions", 3)
+    end
+    if b_seen[b_dims[i]] then
+      error("tensordot b_dims must not repeat dimensions", 3)
+    end
+    a_seen[a_dims[i]] = true
+    b_seen[b_dims[i]] = true
+  end
+  for i = 1, #a_dims do
+    local a_size = a:size(a_dims[i])
+    local b_size = b:size(b_dims[i])
+    if a_size ~= b_size then
+      error(string.format(
+        "tensordot dimension %d has mismatched sizes: %d vs %d",
+        i, a_size, b_size), 3)
+    end
+  end
+
+  local a_free, b_free = {}, {}
+  for i = 1, a:dim() do
+    if not a_seen[i] then a_free[#a_free + 1] = i end
+  end
+  for i = 1, b:dim() do
+    if not b_seen[i] then b_free[#b_free + 1] = i end
+  end
+
+  local function size_product(tensor, dimensions)
+    local product = 1
+    for i = 1, #dimensions do
+      product = product * tensor:size(dimensions[i])
+    end
+    return product
+  end
+  local rows = size_product(a, a_free)
+  local inner = size_product(a, a_dims)
+  local columns = size_product(b, b_free)
+
+  local a_permutation, b_permutation = {}, {}
+  for i = 1, #a_free do a_permutation[#a_permutation + 1] = a_free[i] end
+  for i = 1, #a_dims do a_permutation[#a_permutation + 1] = a_dims[i] end
+  for i = 1, #b_dims do b_permutation[#b_permutation + 1] = b_dims[i] end
+  for i = 1, #b_free do b_permutation[#b_permutation + 1] = b_free[i] end
+
+  local left = a:permute(unpack(a_permutation)):reshape(rows, inner)
+  local right = b:permute(unpack(b_permutation)):reshape(inner, columns)
+  local out_shape = {}
+  for i = 1, #a_free do
+    out_shape[#out_shape + 1] = a:size(a_free[i])
+  end
+  for i = 1, #b_free do
+    out_shape[#out_shape + 1] = b:size(b_free[i])
+  end
+  return left:matmul(right):reshape(out_shape)
+end
+
 function torch.cholesky_inverse(a, upper)
   if not Tensor.is_tensor(a) then
     error("torch.cholesky_inverse expects a tensor", 2)
@@ -1352,6 +1479,68 @@ function torch.triu(a, diagonal)
   return a:triu(diagonal)
 end
 
+local function triangular_indices(row, col, diagonal, opts, keep_lower, name)
+  local function size_argument(value, which)
+    if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+        value < 0 or value == math.huge then
+      error(name .. " " .. which .. " must be a non-negative integer", 3)
+    end
+    return math.floor(value)
+  end
+  row = size_argument(row, "row")
+  col = size_argument(col, "col")
+  diagonal = diagonal == nil and 0 or diagonal
+  if type(diagonal) ~= "number" or diagonal ~= diagonal or
+      diagonal % 1 ~= 0 or diagonal == math.huge or diagonal == -math.huge then
+    error(name .. " diagonal must be an integer", 3)
+  end
+  diagonal = math.floor(diagonal)
+
+  local dtype
+  if opts ~= nil then
+    if type(opts) ~= "table" then
+      error(name .. " options must be a table", 3)
+    end
+    for key in pairs(opts) do
+      if key ~= "dtype" and key ~= "device" then
+        error(name .. " got unknown option '" .. tostring(key) .. "'", 3)
+      end
+    end
+    if opts.device ~= nil and opts.device ~= "cpu" then
+      error(name .. " only supports the CPU device", 3)
+    end
+    dtype = opts.dtype
+  end
+
+  local result
+  if row == 0 or col == 0 then
+    result = torch.zeros(2, 0, { dtype = torch.int64 })
+  else
+    local rows = torch.arange(row, { dtype = torch.int64 }):reshape(row, 1)
+    local columns = torch.arange(col, { dtype = torch.int64 }):reshape(1, col)
+    local offsets = columns:sub(rows)
+    local mask
+    if keep_lower then
+      mask = offsets:le(diagonal)
+    else
+      mask = offsets:ge(diagonal)
+    end
+    result = mask:nonzero():t():contiguous()
+  end
+  if dtype ~= nil then
+    result = result:to(dtype)
+  end
+  return result
+end
+
+function torch.tril_indices(row, col, diagonal, opts)
+  return triangular_indices(row, col, diagonal, opts, true, "tril_indices")
+end
+
+function torch.triu_indices(row, col, diagonal, opts)
+  return triangular_indices(row, col, diagonal, opts, false, "triu_indices")
+end
+
 function torch.trace(a)
   if not Tensor.is_tensor(a) then
     error("torch.trace expects a tensor", 2)
@@ -1364,6 +1553,20 @@ function torch.diag(a, diagonal)
     error("torch.diag expects a tensor", 2)
   end
   return a:diag(diagonal)
+end
+
+function torch.diag_embed(a, diagonal)
+  if not Tensor.is_tensor(a) then
+    error("torch.diag_embed expects a tensor", 2)
+  end
+  return a:diag_embed(diagonal)
+end
+
+function torch.diagflat(a, diagonal)
+  if not Tensor.is_tensor(a) then
+    error("torch.diagflat expects a tensor", 2)
+  end
+  return a:reshape(-1):diag(diagonal)
 end
 
 function torch.vander(x, N, increasing)

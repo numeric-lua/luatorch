@@ -3,6 +3,44 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.34.0] — 2026-11-24
+
+### Added
+
+- `torch.diag_embed` / `Tensor:diag_embed(diagonal?)` embeds the last
+  dimension of a tensor on a diagonal of two new trailing dimensions: an input
+  of shape `(*, n)` returns `(*, size, size)` with `size = n + |offset|`.
+  The 0-based offset defaults to 0, leading dimensions are batch dimensions,
+  empty/1-D/2-D/integer/bool inputs are supported, and the result is
+  differentiable;
+- `torch.diagflat(input, diagonal?)` flattens its input and builds a 2-D
+  diagonal matrix from the resulting vector, with the same offset convention
+  and autograd behavior as `diag`;
+- `torch.tril_indices(row, col, diagonal?, opts?)` and
+  `torch.triu_indices(row, col, diagonal?, opts?)` return the selected
+  triangle's coordinates as a `2 x N` integer tensor in row-major order.
+  Coordinates are 1-based to match the Lua surface; `opts.dtype` selects the
+  output dtype (default int64) and `opts.device` must be `"cpu"`;
+- `torch.tensordot(a, b, dims?)` contracts the last `dims` dimensions of `a`
+  with the first `dims` of `b` (integer form), or arbitrary dimensions via a
+  `{a_dims, b_dims}` pair. Paired dimensions must match, both operands must
+  share a dtype, free dimensions keep their order, and autograd flows through
+  the permute/reshape/matmul implementation;
+- `torch.linalg.matrix_rank` accepts an options table
+  `{ tol = t, rtol = r, hermitian = h }`. `rtol` uses the relative threshold
+  `rtol * largest`; `tol` remains an absolute cutoff, supplying both is an
+  error, and the historical numeric/hermitian arguments keep working;
+- 15 tests in `tests/test_linalg_build.lua` cover embedded diagonals, batches,
+  bool/empty inputs, index coordinates and offsets, tensordot shapes and
+  explicit/negative dimensions, autograd for construction and contraction, and
+  `matrix_rank` tolerance options; the suite is now **557 tests**.
+
+### Changed
+
+- `docs/api.md`, the docs API guards, README status/feature table/build count,
+  roadmap, release notes, and the `0.34.0` rockspec describe or guard the new
+  APIs. All changes are pure Lua; no C++ shim or FFI declaration changed.
+
 ## [0.33.0] — 2026-11-24
 
 ### Added

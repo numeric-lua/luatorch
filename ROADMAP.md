@@ -72,6 +72,8 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
   all real-valued orders
 - [x] `tril`/`triu`, `trace`, `diag`, and the `left=false` right-side
   `torch.linalg.solve` option with autograd and validation
+- [x] `diag_embed`/`diagflat`, `tril_indices`/`triu_indices`, `tensordot`, and
+  relative `rtol` support in `matrix_rank`
 - [ ] complex `eig`/`eigvals` and remaining `linalg.*` bindings
 - [x] Random: `normal_`, `exponential_`, `bernoulli_`, `uniform_`, `multinomial`
 - [ ] More distributions: `poisson`, `geometric`, `cauchy`, tensor-weighted
