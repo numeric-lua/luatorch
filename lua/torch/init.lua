@@ -935,6 +935,12 @@ torch.linalg = {
   lu_solve = function(lu, pivots, b, opts)
     return lu:lu_solve(pivots, b, opts)
   end,
+  lu_unpack = function(lu, pivots, opts)
+    if not Tensor.is_tensor(lu) then
+      error("lu_unpack expects a packed LU tensor", 3)
+    end
+    return lu:lu_unpack(pivots, opts)
+  end,
   ldl_factor = function(a, opts)
     if not Tensor.is_tensor(a) then
       error("ldl_factor expects a tensor", 3)

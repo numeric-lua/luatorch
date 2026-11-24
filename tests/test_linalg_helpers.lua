@@ -31,6 +31,11 @@ test("lu_unpack reconstructs P, L, U from a packed factorization", function()
   assert_tensor(module_l, l:totable(), 1e-12)
   assert_tensor(module_u, u:totable(), 1e-12)
 
+  local linalg_p, linalg_l, linalg_u = torch.linalg.lu_unpack(lu, pivots)
+  assert_tensor(linalg_p, p:totable(), 1e-12)
+  assert_tensor(linalg_l, l:totable(), 1e-12)
+  assert_tensor(linalg_u, u:totable(), 1e-12)
+
   local swapped = float_matrix({ { 0, 1 }, { 1, 0 } })
   local swapped_lu, swapped_pivots = swapped:lu_factor()
   local sp, sl, su = torch.lu_unpack(swapped_lu, swapped_pivots)
@@ -157,6 +162,9 @@ test("lu_unpack validates shapes, dtypes, pivots, and options", function()
   assert_error(function()
     lu:lu_unpack(bad)
   end, "1-based pivot indices")
+  assert_error(function()
+    torch.linalg.lu_unpack({ 1, 2 })
+  end, "packed LU tensor")
 
   local batch = torch.tensor({
     { { 1, 0 }, { 0, 1 } },

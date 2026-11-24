@@ -374,6 +374,7 @@ torch.linalg.ldl_factor(a, opts?)  -- compact LDL^T factor
 torch.linalg.ldl_factor_ex(a, opts?)  -- factor plus int32 info
 torch.linalg.ldl_solve(ld, pivots, b, opts?)  -- solve from an LDL factor
 torch.lu_unpack(lu, pivots, opts?)
+torch.linalg.lu_unpack(lu, pivots, opts?)  -- alias of torch.lu_unpack
 torch.diagonal(a, offset?, dim1?, dim2?)
 torch.vander(x, N?, increasing?)          -- 1-D, decreasing by default
 torch.cross(a, b, dim?)                   -- default dim is the last dimension
@@ -637,7 +638,8 @@ empty factors as `lu_factor`; `P` has shape `(*, m, m)`, `L` has shape
 The integer pivots are validated as 1-based row indices, and `P` stays
 detached. `L` and `U` are built with differentiable tensor arithmetic, so
 gradients flow through the packed factor. `opts.unpack_data = false` returns
-empty `L`/`U`, and `opts.unpack_pivots = false` returns an empty `P`:
+empty `L`/`U`, and `opts.unpack_pivots = false` returns an empty `P`.
+`torch.linalg.lu_unpack` is an alias of `torch.lu_unpack`:
 
 ```lua
 local a = torch.tensor({{4, 3}, {2, 1}}, {dtype = torch.float64})
@@ -1188,6 +1190,7 @@ torch.linalg.lstsq(a, b, opts?)  -- returns x, residuals, rank, singular values
 torch.linalg.pinv(a, opts?)      -- Moore-Penrose pseudoinverse
 torch.linalg.matrix_exp(a)       -- matrix exponential
 torch.lu_unpack(lu, pivots, opts?)  -- P, L, U from a packed factorization
+torch.linalg.lu_unpack(lu, pivots, opts?)  -- alias of torch.lu_unpack
 torch.diagonal(a, offset?, dim1?, dim2?) / torch.linalg.diagonal(a, ...)
 torch.vander(x, N?, increasing?) / torch.linalg.vander(x, N?)
 torch.cross(a, b, dim?) / torch.linalg.cross(a, b, dim?)
