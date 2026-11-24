@@ -845,6 +845,23 @@ print(torch.linalg.norm(a, nil, 1):totable())      -- column 2-norms
 print(torch.linalg.norm(a, "fro", {1, 2}, true):sizes())  -- {1, 1}
 ```
 
+`torch.linalg.matrix_rank(a, tol?, hermitian?)` returns the numerical rank of
+a matrix or batch of matrices. The default tolerance is
+`max(m, n) * eps(dtype) * largest singular value`; a numeric `tol` is used as
+an absolute cutoff, so singular values strictly greater than `tol` count.
+`hermitian = true` requires square input and uses the absolute eigenvalues of
+the real symmetric matrix instead of its singular values. A plain 2-D input
+still returns the historical Lua number, while batched inputs return an
+`int64` tensor with the batch shape. Only float32 and float64 are accepted,
+matching the SVD and symmetric-eigenvalue CPU paths:
+
+```lua
+local a = torch.tensor({{{1, 0}, {0, 1}}, {{1, 1}, {1, 1}}},
+  {dtype = torch.float64})
+print(torch.linalg.matrix_rank(a):totable())          -- {2, 1}
+print(torch.linalg.matrix_rank(a, 1e-12, true):totable())  -- {2, 1}
+```
+
 `torch.linalg.multi_dot({a, b, ...})` multiplies two or more matrices with a
 dynamic-programming parenthesization that minimizes scalar multiplications.
 The first and last operands may be 1-D vectors (treated as a row and column
@@ -1182,7 +1199,8 @@ torch.cholesky_solve(b, factor, upper?)   -- solve from a Cholesky factor
 torch.linalg.eigh(a, uplo?) / torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.inv_ex(a, opts?)    -- inverse plus int32 info
 torch.linalg.cond(a, p?)         -- 2, 1, inf, fro
-torch.linalg.matrix_rank(a, tol?)
+torch.linalg.matrix_rank(a, tol?, hermitian?)
+                                  -- batched int64 ranks; 2-D returns a number
 torch.linalg.matrix_power(a, n)  -- integer matrix power
 torch.linalg.vector_norm(a, ord?, dim?, keepdim?)
 torch.linalg.slogdet(a)          -- returns sign, logabsdet

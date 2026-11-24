@@ -870,6 +870,86 @@ local function vector_norm_tensor(a, ord, dim, keepdim)
   return result
 end
 
+-- Count singular values (or absolute eigenvalues for hermitian inputs) above
+-- a threshold. The default threshold follows PyTorch's rank convention:
+-- max(m, n) * eps(dtype) * largest value. A supplied tol is used as an
+-- absolute cutoff.
+local function matrix_rank_values(values, tol, rows, columns, dtype)
+  local largest = 0
+  for i = 1, #values do
+    if values[i] > largest then largest = values[i] end
+  end
+  local threshold = tol
+  if threshold == nil then
+    local epsilon = dtype == "float32" and 1.1920929e-7 or
+      2.220446049250313e-16
+    threshold = math.max(rows, columns) * epsilon * largest
+  end
+  local rank = 0
+  for i = 1, #values do
+    if values[i] > threshold then rank = rank + 1 end
+  end
+  return rank
+end
+
+-- Rank of a matrix or batch of matrices from its singular values. A 2-D input
+-- keeps the historical Lua-number result; batches return an int64 tensor with
+-- the batch shape. hermitian=true uses absolute eigenvalues of a real
+-- symmetric square matrix instead of the SVD.
+local function matrix_rank_tensor(a, tol, hermitian)
+  if not Tensor.is_tensor(a) then
+    error("matrix_rank expects a tensor", 3)
+  end
+  if a:dim() < 2 then
+    error("matrix_rank expects a matrix or a batch of matrices", 3)
+  end
+  local dtype = a:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("matrix_rank supports float32 and float64 tensors", 3)
+  end
+  if hermitian ~= nil and type(hermitian) ~= "boolean" then
+    error("matrix_rank hermitian must be a boolean", 3)
+  end
+  if tol ~= nil and (type(tol) ~= "number" or tol ~= tol or tol < 0 or
+      tol == math.huge) then
+    error("matrix_rank tol must be a non-negative finite number", 3)
+  end
+  local rows, columns = a:size(-2), a:size(-1)
+  if hermitian and rows ~= columns then
+    error("matrix_rank hermitian=true expects square matrices", 3)
+  end
+
+  local values
+  if hermitian then
+    values = a:eigvalsh("L"):abs()
+  else
+    values = a:svdvals()
+  end
+
+  if a:dim() == 2 then
+    return matrix_rank_values(values:totable(), tol, rows, columns, dtype)
+  end
+
+  local batch_shape = {}
+  for i = 1, a:dim() - 2 do batch_shape[i] = a:size(i) end
+  local batch_count = 1
+  for i = 1, #batch_shape do
+    batch_count = batch_count * batch_shape[i]
+  end
+  if batch_count == 0 then
+    return torch.zeros(batch_shape, { dtype = torch.int64 })
+  end
+
+  local k = math.min(rows, columns)
+  local flat = values:reshape(batch_count, k)
+  local ranks = {}
+  for i = 1, batch_count do
+    ranks[i] = matrix_rank_values(flat:select(1, i):totable(), tol,
+      rows, columns, dtype)
+  end
+  return torch.tensor(ranks, { dtype = torch.int64 }):reshape(batch_shape)
+end
+
 torch.linalg = {
   inv = function(a) return a:inverse() end,
   inv_ex = function(a, opts)
@@ -1037,24 +1117,8 @@ torch.linalg = {
     end
     error("cond supports 2, 1, inf, and 'fro'", 3)
   end,
-  matrix_rank = function(a, tol)
-    if not Tensor.is_tensor(a) or a:dim() ~= 2 then
-      error("matrix_rank expects a 2-D tensor", 3)
-    end
-    local _, singular = a:svd()
-    local values = singular:totable()
-    if tol == nil then
-      local largest = 0
-      for _, value in ipairs(values) do
-        if value > largest then largest = value end
-      end
-      tol = math.max(a:size(1), a:size(2)) * 2.220446049250313e-16 * largest
-    end
-    local rank = 0
-    for _, value in ipairs(values) do
-      if value > tol then rank = rank + 1 end
-    end
-    return rank
+  matrix_rank = function(a, tol, hermitian)
+    return matrix_rank_tensor(a, tol, hermitian)
   end,
   matrix_norm = function(a, ord, dim1, dim2, keepdim)
     if not Tensor.is_tensor(a) then

@@ -1343,6 +1343,86 @@ test("torch.linalg.norm validates dispatch and dimensions", function()
   end, "ord must be a number")
 end)
 
+test("matrix_rank handles tolerances, batches, and hermitian inputs", function()
+  local identity = torch.eye(2)
+  assert_eq(type(torch.linalg.matrix_rank(identity)), "number")
+  assert_eq(torch.linalg.matrix_rank(identity), 2)
+
+  local singular = float_matrix({ { 1, 0 }, { 0, 0 } })
+  assert_eq(torch.linalg.matrix_rank(singular), 1)
+  local near_singular = float_matrix({ { 1, 0 }, { 0, 1e-16 } })
+  assert_eq(torch.linalg.matrix_rank(near_singular), 1)
+  assert_eq(torch.linalg.matrix_rank(near_singular, 1e-12), 1)
+  assert_eq(torch.linalg.matrix_rank(near_singular, 0), 2)
+
+  local symmetric = float_matrix({ { 2, 1 }, { 1, 2 } })
+  assert_eq(torch.linalg.matrix_rank(symmetric, nil, true), 2)
+  local repeated = float_matrix({ { 1, 1 }, { 1, 1 } })
+  assert_eq(torch.linalg.matrix_rank(repeated), 1)
+  assert_eq(torch.linalg.matrix_rank(repeated, nil, true), 1)
+  assert_eq(torch.linalg.matrix_rank(repeated, 1e-12, true), 1)
+
+  local batch = torch.tensor({
+    { { 1, 0 }, { 0, 1 } },
+    { { 1, 1 }, { 1, 1 } },
+    { { 0, 0 }, { 0, 0 } },
+  }, { dtype = torch.float64 })
+  local ranks = torch.linalg.matrix_rank(batch)
+  assert_shape(ranks, { 3 })
+  assert_dtype(ranks, "int64")
+  assert_tensor(ranks, { 2, 1, 0 })
+
+  local rectangular = torch.tensor({
+    { { 1, 0, 0 }, { 0, 1, 0 } },
+    { { 1, 0, 0 }, { 0, 0, 0 } },
+  }, { dtype = torch.float64 })
+  assert_tensor(torch.linalg.matrix_rank(rectangular), { 2, 1 })
+
+  local symmetric_batch = torch.tensor({
+    { { 2, 1 }, { 1, 2 } },
+    { { 1, 1 }, { 1, 1 } },
+  }, { dtype = torch.float64 })
+  assert_tensor(torch.linalg.matrix_rank(symmetric_batch, nil, true),
+    { 2, 1 })
+
+  local empty = torch.zeros(0, 2, 2, { dtype = torch.float64 })
+  local empty_ranks = torch.linalg.matrix_rank(empty)
+  assert_shape(empty_ranks, { 0 })
+  assert_dtype(empty_ranks, "int64")
+end)
+
+test("matrix_rank validates ranks, dtypes, tolerance, and hermitian", function()
+  local matrix = float_matrix({ { 1, 2 }, { 3, 4 } })
+  assert_error(function()
+    torch.linalg.matrix_rank(torch.ones(3))
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.linalg.matrix_rank(torch.ones(2, 2, { dtype = torch.float16 }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.linalg.matrix_rank(torch.ones(2, 2, { dtype = torch.int64 }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.linalg.matrix_rank(torch.ones(2, 2, { dtype = torch.bool }))
+  end, "float32 and float64")
+  assert_error(function()
+    torch.linalg.matrix_rank(matrix, -1)
+  end, "non-negative finite")
+  assert_error(function()
+    torch.linalg.matrix_rank(matrix, math.huge)
+  end, "non-negative finite")
+  assert_error(function()
+    torch.linalg.matrix_rank(matrix, 0 / 0)
+  end, "non-negative finite")
+  assert_error(function()
+    torch.linalg.matrix_rank(matrix, nil, 1)
+  end, "hermitian must be a boolean")
+  assert_error(function()
+    torch.linalg.matrix_rank(torch.ones(2, 3, { dtype = torch.float64 }),
+      nil, true)
+  end, "square matrices")
+end)
+
 test("lu_factor_ex returns compact factors and info", function()
   local a = float_matrix({ { 4, 3 }, { 2, 1 } })
   local lu, pivots, info = a:lu_factor_ex()
