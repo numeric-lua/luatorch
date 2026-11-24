@@ -328,6 +328,7 @@ a:solve_ex(b, opts?) -- solve plus int32 info; opts.left/check_errors
 a:solve_triangular(b, opts)  -- triangular solve; opts.upper is required
 a:lstsq(b, opts?)   -- least squares; returns x, residuals, rank, singular values
 a:cholesky(upper?)  -- A = L L^T (or U^T U)
+a:cholesky_inverse(upper?)  -- inverse from a Cholesky factor
 a:cholesky_ex(opts?)   -- factor plus int32 info; opts.upper/check_errors
 a:eigh(uplo?)          -- real symmetric eigenvalues (ascending) and vectors
 a:eigvalsh(uplo?)      -- real symmetric eigenvalues only
@@ -356,6 +357,7 @@ torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
 torch.linalg.det(a)      torch.linalg.slogdet(a)
 torch.linalg.solve(a, b) torch.linalg.cholesky(a) torch.linalg.svd(a)
+torch.linalg.cholesky_inverse(a, upper?)  -- inverse from a Cholesky factor
 torch.linalg.solve_ex(a, b, opts?)  -- solution plus int32 info
 torch.linalg.cholesky_ex(a, opts?)
 torch.linalg.eigh(a, uplo?)  torch.linalg.eigvalsh(a, uplo?)
@@ -459,6 +461,22 @@ local l, info = torch.linalg.cholesky_ex(a)
 print(info:item())                    -- 0
 print(l:matmul(l:t()):allclose(a))    -- true
 ```
+
+`cholesky_inverse` recovers the inverse of a real symmetric
+positive-definite matrix from its Cholesky factor. Pass the lower factor `L`
+from `A = L L^T` by default, or the upper factor `U` with `upper = true` for
+`A = U^T U`. Square and batched float32/float64 factors are supported, the
+result has the same shape as the factor, and the inverse is differentiable:
+
+```lua
+local a = torch.tensor({{4, 2}, {2, 3}}, {dtype = torch.float64})
+local inverse = torch.linalg.cholesky_inverse(a:cholesky())
+print(inverse:allclose(a:inverse()))  -- true
+```
+
+`torch.cholesky_inverse(a, upper?)` is the top-level alias. Only float32 and
+float64 are accepted; sub-2-D, non-square, half, integer, and bool inputs are
+rejected by the Lua layer.
 
 `eigh` computes the eigenvalues and eigenvectors of real symmetric matrices
 or batches of symmetric matrices. It reads the lower triangle by default;
@@ -1137,6 +1155,7 @@ torch.linalg.lu_factor_ex(a, opts?)  -- packed LU, pivots, plus int32 info
 torch.linalg.ldl_factor(a, opts?) / torch.linalg.ldl_factor_ex(a, opts?)
 torch.linalg.ldl_solve(ld, pivots, b, opts?)  -- solve from an LDL factor
 torch.linalg.cholesky_ex(a, opts?)  -- factor plus int32 info
+torch.linalg.cholesky_inverse(a, upper?)  -- inverse from a Cholesky factor
 torch.linalg.eigh(a, uplo?) / torch.linalg.eigvalsh(a, uplo?)
 torch.linalg.inv_ex(a, opts?)    -- inverse plus int32 info
 torch.linalg.cond(a, p?)         -- 2, 1, inf, fro

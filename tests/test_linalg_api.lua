@@ -838,6 +838,94 @@ test("cholesky_ex validates options, shapes, and dtypes", function()
   end, "float32 and float64")
 end)
 
+test("cholesky_inverse recovers the inverse from a Cholesky factor", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  local expected = matrix:inverse()
+  local lower = matrix:cholesky()
+  local inverse = lower:cholesky_inverse()
+  assert_shape(inverse, { 2, 2 })
+  assert_dtype(inverse, "float64")
+  assert_tensor(inverse, expected:totable(), 1e-12)
+  assert_tensor(matrix:matmul(inverse),
+    torch.eye(2, { dtype = torch.float64 }):totable(), 1e-12)
+  assert_tensor(lower:t():matmul(inverse):matmul(lower),
+    torch.eye(2, { dtype = torch.float64 }):totable(), 1e-12)
+
+  local upper = matrix:cholesky(true)
+  local upper_inverse = upper:cholesky_inverse(true)
+  assert_tensor(upper_inverse, expected:totable(), 1e-12)
+  assert_tensor(upper:matmul(upper_inverse):matmul(upper:t()),
+    torch.eye(2, { dtype = torch.float64 }):totable(), 1e-12)
+
+  assert_tensor(torch.linalg.cholesky_inverse(lower), inverse:totable(), 1e-12)
+  assert_tensor(torch.cholesky_inverse(upper, true), inverse:totable(), 1e-12)
+  assert_dtype(lower:float():cholesky_inverse(), "float32")
+end)
+
+test("cholesky_inverse handles batches and gradients", function()
+  local batch = torch.tensor({
+    { { 4, 2 }, { 2, 3 } },
+    { { 2, 1 }, { 1, 2 } },
+  }, { dtype = torch.float64 })
+  local factors = batch:cholesky()
+  local inverse = factors:cholesky_inverse()
+  assert_shape(inverse, { 2, 2, 2 })
+  for i = 1, 2 do
+    assert_tensor(inverse:select(1, i),
+      batch:select(1, i):inverse():totable(), 1e-12)
+  end
+
+  local values = { { 2, 0 }, { 1, 1.5 } }
+  local weights = float_matrix({ { 1.5, -0.5 }, { 2, 0.75 } })
+  local factor = torch.tensor(values, {
+    dtype = torch.float64,
+    requires_grad = true,
+  })
+  local loss = (factor:cholesky_inverse() * weights):sum()
+  loss:backward()
+
+  local eps = 1e-6
+  local function numeric(i, j, delta)
+    local copy = { { values[1][1], values[1][2] },
+      { values[2][1], values[2][2] } }
+    copy[i][j] = copy[i][j] + delta
+    local perturbed = torch.tensor(copy, { dtype = torch.float64 })
+    return (perturbed:cholesky_inverse() * weights):sum():item()
+  end
+  for i = 1, 2 do
+    for j = 1, i do
+      assert_near(factor:grad():get(i, j),
+        (numeric(i, j, eps) - numeric(i, j, -eps)) / (2 * eps), 1e-5,
+        string.format("d cholesky_inverse loss / d L[%d][%d]", i, j))
+    end
+  end
+end)
+
+test("cholesky_inverse validates shapes, dtypes, and upper", function()
+  local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
+  assert_error(function()
+    torch.linalg.cholesky_inverse(torch.ones(3))
+  end, "matrix or a batch")
+  assert_error(function()
+    torch.linalg.cholesky_inverse(torch.ones(2, 3, { dtype = torch.float64 }))
+  end, "square matrices")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.float16 }):cholesky_inverse()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.int64 }):cholesky_inverse()
+  end, "float32 and float64")
+  assert_error(function()
+    torch.ones(2, 2, { dtype = torch.bool }):cholesky_inverse()
+  end, "float32 and float64")
+  assert_error(function()
+    matrix:cholesky_inverse(1)
+  end, "upper must be a boolean")
+  assert_error(function()
+    torch.cholesky_inverse({ 1, 2 })
+  end, "expects a tensor")
+end)
+
 test("inv_ex inverts matrices and returns info", function()
   local matrix = float_matrix({ { 4, 2 }, { 2, 3 } })
   local inverse, info = torch.linalg.inv_ex(matrix)

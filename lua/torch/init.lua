@@ -894,6 +894,12 @@ torch.linalg = {
   end,
   lstsq = function(a, b, opts) return a:lstsq(b, opts) end,
   cholesky = function(a, upper) return a:cholesky(upper) end,
+  cholesky_inverse = function(a, upper)
+    if not Tensor.is_tensor(a) then
+      error("cholesky_inverse expects a tensor", 3)
+    end
+    return a:cholesky_inverse(upper)
+  end,
   cholesky_ex = function(a, opts)
     if not Tensor.is_tensor(a) then
       error("cholesky_ex expects a tensor", 3)
@@ -1150,6 +1156,13 @@ function torch.linalg.multi_dot(tensors)
   if first_vector then result = result:squeeze(1) end
   if last_vector then result = result:squeeze(-1) end
   return result
+end
+
+function torch.cholesky_inverse(a, upper)
+  if not Tensor.is_tensor(a) then
+    error("torch.cholesky_inverse expects a tensor", 2)
+  end
+  return a:cholesky_inverse(upper)
 end
 
 function torch.lu_unpack(lu, pivots, opts)

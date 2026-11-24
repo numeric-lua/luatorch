@@ -2177,6 +2177,14 @@ lt_tensor* lt_linalg_cholesky(lt_tensor* a, int upper) {
   LT_CATCH_NULL
 }
 
+lt_tensor* lt_linalg_cholesky_inverse(lt_tensor* a, int upper) {
+  try {
+    clear_error();
+    return wrap(at::cholesky_inverse(a->t, upper != 0));
+  }
+  LT_CATCH_NULL
+}
+
 int lt_linalg_cholesky_ex(lt_tensor* a, int upper, int check_errors,
                           lt_tensor** L, lt_tensor** info) {
   try {

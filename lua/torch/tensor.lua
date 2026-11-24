@@ -1653,6 +1653,27 @@ function Tensor:cholesky(upper)
   return wrap(lib.lt_linalg_cholesky(self.h, upper and 1 or 0))
 end
 
+-- Inverse of a real symmetric positive-definite matrix from its Cholesky
+-- factor. `self` is the lower factor L of A = L L^T by default; pass true for
+-- the upper factor U of A = U^T U. Square and batched float32/float64 factors
+-- are accepted, and the inverse is differentiable.
+function Tensor:cholesky_inverse(upper)
+  if self:dim() < 2 then
+    error("cholesky_inverse expects a matrix or a batch of matrices", 3)
+  end
+  if self:size(-2) ~= self:size(-1) then
+    error("cholesky_inverse expects square matrices", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float32" and dtype ~= "float64" then
+    error("cholesky_inverse supports float32 and float64 tensors", 3)
+  end
+  if upper ~= nil and type(upper) ~= "boolean" then
+    error("cholesky_inverse upper must be a boolean", 3)
+  end
+  return wrap(lib.lt_linalg_cholesky_inverse(self.h, upper and 1 or 0))
+end
+
 local cholesky_ex_options = {
   upper = true,
   check_errors = true,
