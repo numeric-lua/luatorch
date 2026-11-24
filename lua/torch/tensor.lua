@@ -642,6 +642,20 @@ local function index_cdata(self, indices)
   return array
 end
 
+-- LuaJIT NaN-boxes values in doubles, so a NaN payload produced by an ATen
+-- kernel can read back as nil or a NULL cdata instead of a Lua number. Map any
+-- such non-number (and every NaN payload) to the canonical Lua NaN so values
+-- round-trip through get/totable/iter regardless of their bit pattern.
+local function canonical_double(value)
+  if value == nil or type(value) == "cdata" then
+    return 0 / 0
+  end
+  if value ~= value then
+    return 0 / 0
+  end
+  return value
+end
+
 function Tensor:get(...)
   local indices = { ... }
   local n = self:dim()
@@ -658,7 +672,7 @@ function Tensor:get(...)
   else
     local out = ffi.new("double[1]")
     check(lib.lt_item_f64(self.h, n, array, out))
-    return out[0]
+    return canonical_double(out[0])
   end
 end
 
@@ -988,6 +1002,59 @@ end
 
 function Tensor:isfinite()
   return wrap(lib.lt_isfinite(self.h))
+end
+
+local nan_to_num_limits = {
+  float16 = { posinf = 65504.0, neginf = -65504.0 },
+  float32 = {
+    posinf = 3.4028234663852886e38,
+    neginf = -3.4028234663852886e38,
+  },
+  float64 = {
+    posinf = 1.7976931348623157e308,
+    neginf = -1.7976931348623157e308,
+  },
+}
+
+local function full_like_value(reference, value)
+  local array, ndim = shape_to_cdata(reference:sizes())
+  return wrap(lib.lt_full(ndim, array, value, reference:dtype_id()))
+end
+
+-- Replace NaN, +Inf, and -Inf with finite values. Floating tensors default to
+-- NaN -> 0 and infinities -> the largest/smallest finite value of the dtype.
+-- Integer and bool tensors have no non-finite values and are returned as a
+-- clone. Replaced entries contribute zero gradient, matching PyTorch.
+function Tensor:nan_to_num(nan, posinf, neginf)
+  local arguments = { { "nan", nan }, { "posinf", posinf },
+    { "neginf", neginf } }
+  for i = 1, #arguments do
+    local value = arguments[i][2]
+    if value ~= nil and type(value) ~= "number" then
+      error("nan_to_num " .. arguments[i][1] .. " must be a number", 3)
+    end
+  end
+  local limits = nan_to_num_limits[self:dtype()]
+  if limits == nil then
+    return self:clone()
+  end
+  nan = nan == nil and 0.0 or nan
+  posinf = posinf == nil and limits.posinf or posinf
+  neginf = neginf == nil and limits.neginf or neginf
+
+  local result = self
+  local mask = result:isnan()
+  local replacement = full_like_value(self, nan)
+  result = wrap(lib.lt_where(mask.h, replacement.h, result.h))
+
+  mask = result:isinf():logical_and(result:gt(0))
+  replacement = full_like_value(self, posinf)
+  result = wrap(lib.lt_where(mask.h, replacement.h, result.h))
+
+  mask = result:isinf():logical_and(result:lt(0))
+  replacement = full_like_value(self, neginf)
+  result = wrap(lib.lt_where(mask.h, replacement.h, result.h))
+  return result
 end
 
 local unary_fns = {
@@ -2629,6 +2696,73 @@ function Tensor:min(dim, keepdim)
   return values, reduction(self, lib.lt_argmin, dim, keepdim):add(1)
 end
 
+-- Min and max values in one call, without materializing argmin/argmax. When
+-- `dim` is nil the result is two 0-dim tensors; otherwise both results have
+-- the reduced shape. `keepdim` is ignored without a dimension, matching
+-- PyTorch's aminmax.
+function Tensor:aminmax(dim, keepdim)
+  if dim == nil then
+    return self:min(), self:max()
+  end
+  if type(dim) ~= "number" or dim % 1 ~= 0 then
+    error("aminmax dim must be an integer", 3)
+  end
+  if keepdim ~= nil and type(keepdim) ~= "boolean" then
+    error("aminmax keepdim must be a boolean", 3)
+  end
+  return self:min(dim, keepdim), self:max(dim, keepdim)
+end
+
+-- Count non-zero entries. With no dimension this is a 0-dim int64 tensor;
+-- with an integer or a table of dimensions the reduced dimensions are
+-- removed, matching torch.count_nonzero.
+function Tensor:count_nonzero(dim)
+  local counts = self:ne(0):to("int64")
+  if dim == nil then
+    return counts:sum()
+  end
+  if type(dim) == "number" then
+    if dim % 1 ~= 0 then
+      error("count_nonzero dim must be an integer", 3)
+    end
+    local rank = self:dim()
+    if dim == 0 or dim > rank or dim < -rank then
+      error("count_nonzero dim " .. tostring(dim) .. " is out of range", 3)
+    end
+    return counts:sum(dim)
+  end
+  if type(dim) ~= "table" then
+    error("count_nonzero dim must be an integer or a table of integers", 3)
+  end
+  if #dim == 0 then
+    error("count_nonzero dim table must not be empty", 3)
+  end
+  local rank = self:dim()
+  local dims, seen = {}, {}
+  for i = 1, #dim do
+    local value = dim[i]
+    if type(value) ~= "number" or value % 1 ~= 0 then
+      error("count_nonzero dim must contain integers", 3)
+    end
+    local resolved = value
+    if resolved < 0 then resolved = resolved + rank + 1 end
+    if resolved < 1 or resolved > rank then
+      error("count_nonzero dim " .. tostring(value) .. " is out of range", 3)
+    end
+    if seen[resolved] then
+      error("count_nonzero dim table must not repeat dimensions", 3)
+    end
+    seen[resolved] = true
+    dims[#dims + 1] = resolved
+  end
+  table.sort(dims)
+  -- Reduce from the highest dimension down so earlier indices stay valid.
+  for i = #dims, 1, -1 do
+    counts = counts:sum(dims[i])
+  end
+  return counts
+end
+
 -- ATen returns 0-based indices; Lua users expect 1-based ones, so shift.
 function Tensor:argmax(dim, keepdim)
   return reduction(self, lib.lt_argmax, dim, keepdim):add(1)
@@ -2790,12 +2924,42 @@ function Tensor:equal(other)
   return self:eq(other):all():item() ~= false
 end
 
-function Tensor:allclose(other, rtol, atol)
-  rtol = rtol or 1e-5
-  atol = atol or 1e-8
+-- Elementwise closeness with NumPy/PyTorch semantics: values are close when
+-- they are exactly equal or when |a - b| <= atol + rtol * |b|. Exact equality
+-- keeps matching infinities close, which the tolerance formula cannot express
+-- because inf - inf is NaN. `equal_nan` additionally treats matching NaNs as
+-- close. The result is a detached bool tensor.
+function Tensor:isclose(other, rtol, atol, equal_nan)
+  if not is_tensor(other) then
+    error("isclose expects a tensor", 3)
+  end
+  if self:dtype() == "bool" or other:dtype() == "bool" then
+    error("isclose does not support bool tensors", 3)
+  end
+  rtol = rtol == nil and 1e-5 or rtol
+  atol = atol == nil and 1e-8 or atol
+  if type(rtol) ~= "number" or rtol < 0 then
+    error("isclose rtol must be a non-negative number", 3)
+  end
+  if type(atol) ~= "number" or atol < 0 then
+    error("isclose atol must be a non-negative number", 3)
+  end
+  if equal_nan ~= nil and type(equal_nan) ~= "boolean" then
+    error("isclose equal_nan must be a boolean", 3)
+  end
   local difference = self:sub(other):abs()
   local tolerance = other:abs():mul(rtol):add(atol)
-  return difference:le(tolerance):all():item() ~= false
+  local finite = self:isfinite():logical_and(other:isfinite())
+  local close = self:eq(other):logical_or(
+    finite:logical_and(difference:le(tolerance)))
+  if equal_nan then
+    close = close:logical_or(self:isnan():logical_and(other:isnan()))
+  end
+  return close
+end
+
+function Tensor:allclose(other, rtol, atol, equal_nan)
+  return self:isclose(other, rtol, atol, equal_nan):all():item() ~= false
 end
 
 -- ---------------------------------------------------------------------------
@@ -2823,10 +2987,10 @@ end
 local function make_reader(dtype, pointer)
   if dtype == 0 then
     local p = ffi.cast("float*", pointer)
-    return function(i) return p[i] end
+    return function(i) return canonical_double(p[i]) end
   elseif dtype == 1 then
     local p = ffi.cast("double*", pointer)
-    return function(i) return p[i] end
+    return function(i) return canonical_double(p[i]) end
   elseif dtype == 2 then
     local p = ffi.cast("int64_t*", pointer)
     return function(i) return tonumber(p[i]) end

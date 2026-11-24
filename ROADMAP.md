@@ -78,7 +78,7 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
 - [x] `einsum` (including ellipsis, repeated-label, and empty/scalar edges), `ger`
 - [x] `logsumexp`
 - [x] NaN/Inf predicates (`torch.isnan`, `torch.isinf`, `torch.isfinite`)
-- [ ] More reductions: `aminmax`, `median`, `quantile`
+- [x] More reductions: `aminmax`, `median`, `quantile`, `count_nonzero`
 - [x] Thread-count control (`torch.set_num_threads`)
 - [x] `float16` creation from Lua values, `from_blob` buffers, and printing parity
 
@@ -125,6 +125,9 @@ concrete: each milestone should leave `scripts/test.sh` green and documented.
 - [x] Profiling helpers (`torch.profiler`, per-method timing/counts)
 - [x] Improved large-tensor printing with edge previews
 - [x] CI matrix (GCC/Clang on Linux; LuaJIT tests)
+- [x] API parity helpers: `isclose`/`allclose(equal_nan)`, `nan_to_num`,
+  `aminmax`, `count_nonzero`, and the `torch.linalg` matmul-family aliases
+- [x] NaN-payload-safe `get`/`totable`/`iter` reads
 
 ## v0.7 — profiling and release polish (done)
 

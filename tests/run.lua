@@ -149,6 +149,7 @@ local files = {
   "test_shape.lua",
   "test_reductions.lua",
   "test_tensor_extra.lua",
+  "test_api_compat.lua",
   "test_blob.lua",
   "test_fuse.lua",
   "test_fusetrain.lua",

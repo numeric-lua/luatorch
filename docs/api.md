@@ -1,4 +1,4 @@
-# luatorch API reference (0.31.0)
+# luatorch API reference (0.32.0)
 
 All examples assume:
 
@@ -353,6 +353,10 @@ a:vander(N?, increasing?)          -- Vandermonde powers of the last dimension
 a:cross(other, dim?)               -- 3-vector cross product along one dimension
 a:vecdot(other, dim?)              -- batched vector dot along one dimension
 
+torch.linalg.matmul(a, b)  -- broadcasting matrix product
+torch.linalg.mm(a, b)      -- 2-D matrix product
+torch.linalg.mv(a, v)      -- matrix-vector product
+torch.linalg.outer(a, b)   -- outer product of two 1-D tensors
 torch.linalg.inv(a)      torch.linalg.inv_ex(a, opts?)
 torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
@@ -386,6 +390,12 @@ torch.linalg.multi_dot({a, b, c, ...})    -- optimal chain product
 torch.linalg.pinv(a, opts?)
 torch.linalg.matrix_exp(a)
 ```
+
+`torch.linalg.matmul`, `torch.linalg.mm`, `torch.linalg.mv`, and
+`torch.linalg.outer` mirror `torch.matmul`/`Tensor:matmul`,
+`torch.mm`/`Tensor:mm`, `torch.mv`/`Tensor:mv`, and
+`torch.outer`/`Tensor:outer`. They keep broadcasting, dtype promotion, and
+autograd, and each rejects a non-tensor operand with a Lua error.
 
 `tensorinv` inverts a tensor with respect to `torch.tensordot`. Its first
 `ind` dimensions (default 2) are grouped into `m` rows and the remaining
@@ -1030,6 +1040,8 @@ t:mean(dim?, keepdim?)
 t:prod(dim?, keepdim?)
 t:max(dim?, keepdim?)          -- values[, indices] when dim is given
 t:min(dim?, keepdim?)          -- values[, indices] when dim is given
+t:aminmax(dim?, keepdim?)      -- minimum and maximum values only
+t:count_nonzero(dim?)          -- number of non-zero entries (int64)
 t:argmax(dim?, keepdim?)       -- 1-based indices
 t:argmin(dim?, keepdim?)
 t:var(dim?, unbiased?, keepdim?)
@@ -1047,6 +1059,25 @@ t:any(dim?, keepdim?)
 
 ```lua
 local values, indices = t:max(2)
+```
+
+`aminmax` returns the minimum and maximum values as two tensors without
+materializing the indices. With no dimension both results are 0-dim and
+`keepdim` is ignored; with an integer dimension (negative counts from the end)
+both have the reduced shape, or the kept shape when `keepdim` is true.
+`torch.aminmax(t, dim?, keepdim?)` is the module-level form. NaN propagates
+through both values, like `min`/`max`.
+
+`count_nonzero` returns an int64 tensor with the number of entries that are
+not zero (NaN counts as non-zero, matching PyTorch). With no dimension the
+result is 0-dim; `dim` may be an integer or a non-empty table of distinct
+dimensions, in which case the reduced dimensions are removed:
+
+```lua
+local t = torch.tensor({{1, 0, 3}, {0, 5, 0}})
+t:count_nonzero():item()        -- 3
+t:count_nonzero(1):totable()    -- {1, 1, 1}
+t:count_nonzero({1, 2}):item()  -- 3
 ```
 
 `trapezoid` applies the trapezoidal rule along one dimension and removes that
@@ -1140,9 +1171,27 @@ local evens = fun.totable(fun.iter({1, 2, 3, 4}):filter(function(x) return x % 2
 
 ```lua
 a:equal(b)              -- same shape and exactly equal values
-a:allclose(b, rtol?, atol?)
+a:isclose(b, rtol?, atol?, equal_nan?)   -- elementwise bool tensor
+a:allclose(b, rtol?, atol?, equal_nan?)  -- one bool for the whole tensor
 torch.equal(a, b)
-torch.allclose(a, b, rtol?, atol?)
+torch.isclose(a, b, rtol?, atol?, equal_nan?)
+torch.allclose(a, b, rtol?, atol?, equal_nan?)
+```
+
+`isclose` compares elementwise with `rtol = 1e-5` and `atol = 1e-8` by
+default: two finite values are close when `|a - b| <= atol + rtol * |b|`.
+Exact equality is also close, so matching infinities compare close while
+`+inf` and `-inf` do not. Matching NaNs are close only when `equal_nan = true`.
+The result has the broadcast shape and is a detached bool tensor; integer
+tensors are accepted, bool tensors are rejected. `allclose` is
+`isclose(...):all():item()` and keeps its historical default tolerances.
+
+```lua
+local a = torch.tensor({1, 2, 3})
+local b = torch.tensor({1, 2.0000001, 4})
+print(a:isclose(b))                     -- tensor([true, true, false])
+print(a:allclose(b))                    -- false
+print(torch.tensor({0/0}):allclose(torch.tensor({0/0}), nil, nil, true))
 ```
 
 ## NaN and Inf predicates
@@ -1161,6 +1210,27 @@ The result has the same shape as the input and never participates in autograd:
 predicates return a detached bool tensor even when the input requires grad.
 Float16/32/64 values are checked; integer and bool tensors produce all-true
 masks, like PyTorch.
+
+`nan_to_num` replaces `NaN`, `+Inf`, and `-Inf` with finite numbers:
+
+```lua
+t:nan_to_num(nan?, posinf?, neginf?)
+torch.nan_to_num(t, nan?, posinf?, neginf?)
+```
+
+For float16/32/64 the defaults are `nan = 0`, `posinf =` the largest finite
+value of the dtype, and `neginf =` the smallest finite value. Supplying a
+number overrides one replacement; `nil` keeps the default. The input is not
+modified, the dtype is preserved, and integer/bool tensors are returned as a
+clone because they cannot hold non-finite values. The operation is
+differentiable: gradients pass through finite entries and are zero at replaced
+entries, matching PyTorch.
+
+```lua
+local t = torch.tensor({1, 0/0, math.huge}, {dtype = torch.float64})
+print(t:nan_to_num())                       -- tensor([1., 0., 1.7977e+308])
+print(t:nan_to_num(-1, 7, -7))              -- tensor([1., -1., 7.])
+```
 
 ## Serialization
 
@@ -1200,10 +1270,15 @@ torch.get_default_dtype()
 torch.dtype_name(dtype)
 torch.get_num_threads() / torch.set_num_threads(n)
 torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / gather / scatter / multinomial
+torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
+torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
 torch.ger(a, b)                  -- outer product of two vectors
 torch.einsum(equation, ...)      -- validated Einstein summation
 torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
+torch.nan_to_num(t, nan?, posinf?, neginf?)  -- replace non-finite values
+torch.isclose(a, b, rtol?, atol?, equal_nan?)  -- elementwise bool tensor
+torch.linalg.matmul(a, b) / mm(a, b) / mv(a, b) / outer(a, b)
 torch.linalg.matrix_norm(a, ord?, dim1?, dim2?, keepdim?)
                                   -- fro, nuc, 2, -2, 1, -1, inf, -inf
 torch.linalg.norm(a, ord?, dim?, keepdim?)  -- vector/matrix norm dispatcher
@@ -1234,6 +1309,6 @@ torch.linalg.multi_dot({a, b, ...})
 torch.mv / outer / addmm / baddbmm
 torch.ALL_DIMS            -- -1000 sentinel (internal, exposed for clarity)
 torch.profiler            -- opt-in tensor-method profiler (see docs/profiler.md)
-torch.VERSION             -- luatorch version string ("0.31.0")
+torch.VERSION             -- luatorch version string ("0.32.0")
 torch.version             -- libtorch version string
 ```

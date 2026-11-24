@@ -1,3 +1,44 @@
+# luatorch 0.32.0
+
+- five PyTorch API-parity tasks are implemented: `aminmax`, `count_nonzero`,
+  `isclose`/`allclose(equal_nan)`, `nan_to_num`, and the
+  `torch.linalg.matmul`/`mm`/`mv`/`outer` aliases;
+- `torch.aminmax` / `Tensor:aminmax(dim?, keepdim?)` returns the minimum and
+  maximum values without materializing indices. A full reduction returns two
+  0-dim tensors, an integer dimension returns both reduced shapes, `keepdim`
+  keeps them, and NaN propagates through both values;
+- `torch.count_nonzero` / `Tensor:count_nonzero(dim?)` returns a 0-dim int64
+  count, or counts over an integer or table of distinct dimensions with those
+  dimensions removed. NaN counts as non-zero, bool and integer tensors are
+  accepted, and an empty/duplicate/out-of-range dimension table raises;
+- `torch.isclose` / `Tensor:isclose(other, rtol?, atol?, equal_nan?)` compares
+  with broadcasting and defaults `rtol = 1e-5`/`atol = 1e-8`. Finite values
+  use `|a - b| <= atol + rtol * |b|`, matching infinities compare close,
+  `+inf`/`-inf` do not, and matching NaNs are close only with
+  `equal_nan = true`. `allclose` accepts the same flag and now delegates to
+  `isclose`, preserving its historical defaults and whole-tensor bool result;
+- `torch.nan_to_num` / `Tensor:nan_to_num(nan?, posinf?, neginf?)` replaces
+  `NaN`, `+Inf`, and `-Inf`. Floating defaults are zero and the dtype's
+  largest/smallest finite value (float16 65504, float32 3.4028e38, float64
+  1.7977e308); explicit numbers override individual replacements; the input is
+  not modified; integer/bool tensors are cloned unchanged; and gradients pass
+  through finite entries with zero at replaced entries;
+- `torch.linalg.matmul`, `torch.linalg.mm`, `torch.linalg.mv`, and
+  `torch.linalg.outer` mirror `torch.matmul`/`Tensor:matmul`, `mm`, `mv`, and
+  `outer`, including broadcasting, dtype promotion, autograd, and clear
+  non-tensor validation;
+- a NaN read fix: reductions can produce a NaN payload that collides with
+  LuaJIT's NaN boxing, causing `get`, `totable`, or `iter` to return `nil` or a
+  NULL cdata. Those reads now canonicalize every NaN payload to a Lua NaN, so
+  printing and table conversion work for `min`/`max`/`aminmax` results;
+- 14 tests in `tests/test_api_compat.lua` cover values, dimensions, keepdim,
+  dtype behavior, NaN propagation, `nan_to_num` autograd, tolerance and
+  `equal_nan` semantics, infinities, aliases, gradients, and validation
+  errors; the suite is now **529 tests** and `./scripts/test.sh` is green;
+- docs, docs guards, README status/feature table/build count, roadmap,
+  CHANGELOG, and the `0.32.0` rockspec are updated. Every change is pure Lua:
+  no C++ shim or FFI declaration changed.
+
 # luatorch 0.31.0
 
 - five real-valued linalg/API gaps are covered: `cholesky_inverse`,

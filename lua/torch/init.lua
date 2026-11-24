@@ -22,7 +22,7 @@ local fun = require("fun")
 
 local torch = {}
 
-torch.VERSION = "0.31.0"
+torch.VERSION = "0.32.0"
 torch.version = libmod.version
 torch.__version = libmod.version
 torch.Tensor = Tensor
@@ -464,8 +464,15 @@ function torch.equal(a, b)
   return a:equal(b)
 end
 
-function torch.allclose(a, b, rtol, atol)
-  return a:allclose(b, rtol, atol)
+function torch.allclose(a, b, rtol, atol, equal_nan)
+  return a:allclose(b, rtol, atol, equal_nan)
+end
+
+function torch.isclose(a, b, rtol, atol, equal_nan)
+  if not Tensor.is_tensor(a) then
+    error("torch.isclose expects a tensor as its first argument", 2)
+  end
+  return a:isclose(b, rtol, atol, equal_nan)
 end
 
 -- NaN / Inf predicates -------------------------------------------------------
@@ -489,6 +496,29 @@ function torch.isfinite(t)
     error("torch.isfinite expects a tensor", 2)
   end
   return t:isfinite()
+end
+
+function torch.nan_to_num(t, nan, posinf, neginf)
+  if not Tensor.is_tensor(t) then
+    error("torch.nan_to_num expects a tensor", 2)
+  end
+  return t:nan_to_num(nan, posinf, neginf)
+end
+
+-- Reductions -----------------------------------------------------------------
+
+function torch.aminmax(t, dim, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.aminmax expects a tensor", 2)
+  end
+  return t:aminmax(dim, keepdim)
+end
+
+function torch.count_nonzero(t, dim)
+  if not Tensor.is_tensor(t) then
+    error("torch.count_nonzero expects a tensor", 2)
+  end
+  return t:count_nonzero(dim)
 end
 
 -- neural-network primitives -------------------------------------------------
@@ -992,6 +1022,30 @@ local function cond_tensor(a, p)
 end
 
 torch.linalg = {
+  matmul = function(a, b)
+    if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+      error("matmul expects two tensors", 3)
+    end
+    return a:matmul(b)
+  end,
+  mm = function(a, b)
+    if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+      error("mm expects two tensors", 3)
+    end
+    return a:mm(b)
+  end,
+  mv = function(a, b)
+    if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+      error("mv expects two tensors", 3)
+    end
+    return a:mv(b)
+  end,
+  outer = function(a, b)
+    if not Tensor.is_tensor(a) or not Tensor.is_tensor(b) then
+      error("outer expects two tensors", 3)
+    end
+    return a:outer(b)
+  end,
   inv = function(a) return a:inverse() end,
   inv_ex = function(a, opts)
     if not Tensor.is_tensor(a) then

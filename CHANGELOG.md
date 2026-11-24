@@ -3,6 +3,51 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.32.0] — 2026-11-24
+
+### Added
+
+- `torch.aminmax` / `Tensor:aminmax(dim?, keepdim?)` returns the minimum and
+  maximum values without materializing the indices; the full reduction returns
+  two 0-dim tensors, an integer dimension returns both reduced shapes, and
+  `keepdim` keeps them; NaN propagates through both values;
+- `torch.count_nonzero` / `Tensor:count_nonzero(dim?)` counts non-zero entries
+  in a 0-dim int64 tensor, or over an integer or table of distinct dimensions
+  with the reduced dimensions removed; NaN counts as non-zero;
+- `torch.isclose` / `Tensor:isclose(other, rtol?, atol?, equal_nan?)` compares
+  two numeric tensors elementwise with broadcasting, defaults
+  `rtol = 1e-5`/`atol = 1e-8`, exact equality for matching infinities, and
+  optional matching-NaN equality; `allclose` gains the same `equal_nan`
+  argument and is now defined through `isclose`, keeping its historical
+  defaults and whole-tensor bool result;
+- `torch.nan_to_num` / `Tensor:nan_to_num(nan?, posinf?, neginf?)` replaces
+  `NaN`, `+Inf`, and `-Inf` with finite values; floating tensors default to
+  zero and the dtype's largest/smallest finite value, explicit numbers
+  override individual replacements, integer/bool tensors are cloned unchanged,
+  and autograd passes through finite entries while replaced entries get zero
+  gradient;
+- `torch.linalg.matmul`, `torch.linalg.mm`, `torch.linalg.mv`, and
+  `torch.linalg.outer` mirror the corresponding `torch`/`Tensor` products,
+  including broadcasting, dtype promotion, autograd, and non-tensor validation;
+- 14 tests in `tests/test_api_compat.lua` cover values, dimensions, keepdim,
+  dtype behavior, warnings/NaN inheritance, autograd for `nan_to_num`,
+  `isclose`/`allclose` tolerances, `equal_nan`, infinities, aliases, and
+  validation errors; the suite is now **529 tests**.
+
+### Fixed
+
+- Reading a tensor value through `get`, `totable`, or `iter` now canonicalizes
+  NaN payloads that collide with LuaJIT's NaN boxing. Reductions such as
+  `min`/`max` (and the new `aminmax`) can produce a NaN bit pattern that
+  previously read back as `nil` or a NULL cdata; they now return a Lua NaN, so
+  printing, table conversion, and iteration work for those results.
+
+### Changed
+
+- `docs/api.md`, the docs API guards, README status/feature table/build count,
+  roadmap, release notes, and the `0.32.0` rockspec describe or guard the new
+  APIs. All changes are pure Lua; no C++ shim or FFI declaration changed.
+
 ## [0.31.0] — 2026-11-24
 
 ### Added
