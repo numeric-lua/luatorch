@@ -313,6 +313,11 @@ t:logaddexp(other)          -- log(exp(self) + exp(other))
 t:logaddexp2(other)         -- log2(2^self + 2^other)
 t:hypot(other)              -- sqrt(self^2 + other^2)
 t:frac()                    -- self - trunc(self)
+t:softplus(beta?, threshold?)  -- log(1 + exp(beta*x)) / beta
+t:elu(alpha?)               -- x if x > 0, alpha*(exp(x)-1) otherwise
+t:selu()                    -- scaled elu
+t:silu()                    -- x * sigmoid(x)
+t:gelu(approximate?)        -- "none" (erf) or "tanh" approximation
 t:fill_(value)        t:zero_()
 ```
 
@@ -332,6 +337,15 @@ fractional part for floating dtypes and zero for integer dtypes, with
 autograd flowing through the subtraction. `torch.logaddexp`,
 `torch.logaddexp2`, `torch.hypot`, and `torch.frac` are the module-level
 forms.
+
+The activation helpers accept float16/float32/float64 tensors and are
+differentiable. `softplus(beta?, threshold?)` defaults to `beta = 1` and
+`threshold = 20`; the stable max-shift form switches to the linear branch above
+the threshold. `elu(alpha?)` defaults `alpha = 1`, `selu()` applies the fixed
+`alpha`/`scale` constants, and `silu()` is `x * sigmoid(x)`. `gelu()` uses the
+exact `erf` form by default and the standard tanh approximation with
+`gelu("tanh")`. Module-level forms are `torch.softplus`, `torch.elu`,
+`torch.selu`, `torch.silu`, and `torch.gelu`.
 
 ## Linear algebra
 
@@ -1452,9 +1466,9 @@ model:load_safetensors("model.safetensors", { strip_prefix = "model." })
 
 `torch.add`, `sub`, `mul`, `div`, `pow`, `matmul`, `mm`, `bmm`, `dot`, `sum`,
 `mean`, `prod`, `max`, `min`, `argmax`, `argmin`, `transpose`, `reshape`,
-`clamp`, `relu`, `sigmoid`, `tanh`, `exp`, `expm1`, `log`, `log2`, `log10`,
-`erf`, `erfc`, `sinc`, `sqrt`, `abs` are thin wrappers around the
-corresponding tensor methods.
+`clamp`, `relu`, `sigmoid`, `tanh`, `softplus`, `elu`, `selu`, `silu`,
+`gelu`, `exp`, `expm1`, `log`, `log2`, `log10`, `erf`, `erfc`, `sinc`,
+`sqrt`, `abs` are thin wrappers around the corresponding tensor methods.
 
 Other module helpers:
 
@@ -1475,6 +1489,8 @@ torch.addcmul(input, t1, t2, value?) / torch.addcdiv(input, t1, t2, value?)
 torch.lerp(input, end_tensor, weight)
 torch.logaddexp(a, b) / torch.logaddexp2(a, b) / torch.hypot(a, b)
 torch.frac(t)
+torch.softplus(t, beta?, threshold?) / torch.elu(t, alpha?)
+torch.selu(t) / torch.silu(t) / torch.gelu(t, approximate?)
 torch.ger(a, b)                  -- outer product of two vectors
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
 torch.trace(a) / torch.diag(a, diagonal?)

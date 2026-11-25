@@ -492,6 +492,36 @@ torch.clamp = function(t, lo, hi) return t:clamp(lo, hi) end
 torch.relu = function(t) return t:relu() end
 torch.sigmoid = function(t) return t:sigmoid() end
 torch.tanh = function(t) return t:tanh() end
+function torch.softplus(input, beta, threshold)
+  if not Tensor.is_tensor(input) then
+    error("torch.softplus expects a tensor", 2)
+  end
+  return input:softplus(beta, threshold)
+end
+function torch.elu(input, alpha)
+  if not Tensor.is_tensor(input) then
+    error("torch.elu expects a tensor", 2)
+  end
+  return input:elu(alpha)
+end
+function torch.selu(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.selu expects a tensor", 2)
+  end
+  return input:selu()
+end
+function torch.silu(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.silu expects a tensor", 2)
+  end
+  return input:silu()
+end
+function torch.gelu(input, approximate)
+  if not Tensor.is_tensor(input) then
+    error("torch.gelu expects a tensor", 2)
+  end
+  return input:gelu(approximate)
+end
 torch.exp = function(t) return t:exp() end
 torch.expm1 = function(t) return t:expm1() end
 torch.log = function(t) return t:log() end

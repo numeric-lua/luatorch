@@ -54,6 +54,15 @@ All notable changes to luatorch are recorded here. The format follows
   functions, alongside `torch.erf` and `torch.erfc`;
 - `sinc` (`sinc_`) computes the normalized `sin(pi x)/(pi x)` with
   `sinc(0) = 1`, alongside `torch.sinc`;
+- `torch.softplus` / `Tensor:softplus(beta?, threshold?)` computes
+  `log(1 + exp(beta*x)) / beta` with a stable max shift and a linear branch
+  above `threshold` (default `beta = 1`, `threshold = 20`);
+- `torch.elu` / `Tensor:elu(alpha?)` computes
+  `x` for `x > 0` and `alpha*(exp(x) - 1)` otherwise; `torch.selu` /
+  `Tensor:selu()` applies the fixed scaled-ELU constants;
+- `torch.silu` / `Tensor:silu()` computes `x * sigmoid(x)`;
+- `torch.gelu` / `Tensor:gelu(approximate?)` computes the exact `erf` form by
+  default and the standard tanh approximation with `approximate = "tanh"`;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
@@ -63,14 +72,17 @@ All notable changes to luatorch are recorded here. The format follows
   `frac` for floats and integers, and validation errors;
 - `tests/test_unary_extra.lua` covers `log2`/`log10` values, in-place and
   float16 calls, `expm1` precision near zero, `erf`/`erfc` known values and
-  complement identity, `sinc` values, and gradients.
+  complement identity, `sinc` values, and gradients;
+- `tests/test_activations.lua` covers softplus/ELU/SELU/SiLU/GELU values,
+  thresholds, exact vs tanh GELU, float16 behavior, gradients, and validation
+  errors.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
-  elementwise/math helpers, and unary functions. The earlier additions are pure
-  Lua; this cycle adds six unary shim entry points (`log2`, `log10`, `expm1`,
-  `erf`, `erfc`, `sinc`) plus their header and FFI declarations.
+  elementwise/math helpers, unary functions, and activation helpers. The
+  unary functions add six shim entry points; the activation helpers are pure
+  Lua composites over existing tensor operations.
 
 ## [0.34.0] — 2026-11-24
 

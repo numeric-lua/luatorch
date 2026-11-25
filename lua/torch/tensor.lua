@@ -1085,6 +1085,79 @@ function Tensor:frac()
   return self:sub(self:trunc())
 end
 
+local function activation_dtype(tensor, name)
+  local dtype = tensor:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error(name .. " supports float16, float32, and float64 tensors", 3)
+  end
+end
+
+-- Softplus: log(1 + exp(beta * x)) / beta. The max-shift form keeps large
+-- positive and negative inputs finite, and threshold switches to the linear
+-- branch above the cutoff.
+function Tensor:softplus(beta, threshold)
+  activation_dtype(self, "softplus")
+  beta = beta == nil and 1 or beta
+  threshold = threshold == nil and 20 or threshold
+  if type(beta) ~= "number" or beta ~= beta or beta <= 0 or
+      beta == math.huge then
+    error("softplus beta must be a positive finite number", 3)
+  end
+  if type(threshold) ~= "number" or threshold ~= threshold or
+      threshold == math.huge or threshold == -math.huge then
+    error("softplus threshold must be a finite number", 3)
+  end
+  local scaled = self:mul(beta)
+  local stable = scaled:relu():add(
+    scaled:abs():neg():exp():log1p()):div(beta)
+  local linear = scaled:gt(threshold)
+  return wrap(lib.lt_where(linear.h, self.h, stable.h))
+end
+
+-- Exponential linear unit: x for x > 0, alpha * (exp(x) - 1) otherwise.
+function Tensor:elu(alpha)
+  activation_dtype(self, "elu")
+  alpha = alpha == nil and 1 or alpha
+  if type(alpha) ~= "number" or alpha ~= alpha then
+    error("elu alpha must be a number", 3)
+  end
+  local negative = self:neg():relu():neg()
+  local negative_branch = negative:expm1():mul(alpha)
+  return wrap(lib.lt_where(self:gt(0).h, self.h, negative_branch.h))
+end
+
+-- Scaled exponential linear unit.
+function Tensor:selu()
+  activation_dtype(self, "selu")
+  local alpha = 1.6732632423543772
+  local scale = 1.0507009873554805
+  return self:elu(alpha):mul(scale)
+end
+
+-- Sigmoid linear unit (swish): x * sigmoid(x).
+function Tensor:silu()
+  activation_dtype(self, "silu")
+  return self:mul(self:sigmoid())
+end
+
+-- Gaussian error linear unit. The default exact form uses erf; the optional
+-- "tanh" form uses the standard tanh approximation.
+function Tensor:gelu(approximate)
+  activation_dtype(self, "gelu")
+  approximate = approximate or "none"
+  if approximate ~= "none" and approximate ~= "tanh" then
+    error("gelu approximate must be 'none' or 'tanh'", 3)
+  end
+  if approximate == "tanh" then
+    local cubed = self:mul(self):mul(self)
+    local shifted = self:add(cubed:mul(0.044715))
+    local inner = shifted:mul(math.sqrt(2 / math.pi))
+    return self:mul(inner:tanh():add(1)):mul(0.5)
+  end
+  local scaled = self:div(math.sqrt(2))
+  return self:mul(scaled:erf():add(1)):mul(0.5)
+end
+
 local function comparison_method(name, tensor_fn, scalar_fn)
   Tensor[name] = function(self, other)
     if is_tensor(other) then
