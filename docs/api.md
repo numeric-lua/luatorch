@@ -256,6 +256,7 @@ t:nonzero()                        -- 1-based coordinates, shape (N, ndim)
 t:sort(dim?, descending?)          -- values, 1-based indices
 t:topk(k, dim?, largest?, sorted?) -- values, 1-based indices
 t:take_along_dim(indices, dim?)    -- gather along a dimension
+t:take(index)                      -- flattened 1-based gather; index shape is output
 t:unique(sorted?, inverse?, counts?) -- values[, inverse, counts]; inverse is 1-based
 t:median(dim?)                    -- median value or dimension median
 t:quantile(q, dim?, keepdim?)     -- interpolated quantile
@@ -318,6 +319,9 @@ t:elu(alpha?)               -- x if x > 0, alpha*(exp(x)-1) otherwise
 t:selu()                    -- scaled elu
 t:silu()                    -- x * sigmoid(x)
 t:gelu(approximate?)        -- "none" (erf) or "tanh" approximation
+t:clamp_min(value)          -- max(self, value), floating dtypes
+t:clamp_max(value)          -- min(self, value), floating dtypes
+t:logit(eps?)               -- inverse sigmoid; eps clamps to [eps, 1-eps]
 t:fill_(value)        t:zero_()
 ```
 
@@ -346,6 +350,12 @@ the threshold. `elu(alpha?)` defaults `alpha = 1`, `selu()` applies the fixed
 exact `erf` form by default and the standard tanh approximation with
 `gelu("tanh")`. Module-level forms are `torch.softplus`, `torch.elu`,
 `torch.selu`, `torch.silu`, and `torch.gelu`.
+
+`clamp_min` and `clamp_max` are one-sided clamps with `_` in-place variants;
+they accept float16/float32/float64 inputs and preserve NaN entries.
+`logit(eps?)` is the inverse sigmoid `log(x/(1-x))`; with `eps` in `[0, 0.5)`
+the input is clamped to `[eps, 1-eps]` first. Module-level forms are
+`torch.clamp_min`, `torch.clamp_max`, and `torch.logit`.
 
 ## Linear algebra
 
@@ -1186,9 +1196,15 @@ t:flatten(start_dim?, end_dim?)
 t:expand(sizes...)
 torch.cat({t1, t2}, dim?)      -- default dim = 1
 torch.stack({t1, t2}, dim?)    -- default dim = 1
+torch.broadcast_shapes({2, 1}, {3})  -- {2, 3}
+torch.broadcast_tensors(t1, t2)      -- expanded views, multiple returns
 ```
 
 `expand` follows PyTorch broadcasting rules (including `-1` to keep a size).
+`broadcast_shapes` aligns trailing dimensions and accepts varargs of shape
+tables, a single table of shape tables, or no arguments (empty shape).
+`broadcast_tensors` computes that common shape and returns one expanded view per
+input; it also accepts a single table of tensors.
 
 ## Reductions
 
@@ -1466,9 +1482,10 @@ model:load_safetensors("model.safetensors", { strip_prefix = "model." })
 
 `torch.add`, `sub`, `mul`, `div`, `pow`, `matmul`, `mm`, `bmm`, `dot`, `sum`,
 `mean`, `prod`, `max`, `min`, `argmax`, `argmin`, `transpose`, `reshape`,
-`clamp`, `relu`, `sigmoid`, `tanh`, `softplus`, `elu`, `selu`, `silu`,
-`gelu`, `exp`, `expm1`, `log`, `log2`, `log10`, `erf`, `erfc`, `sinc`,
-`sqrt`, `abs` are thin wrappers around the corresponding tensor methods.
+`clamp`, `clamp_min`, `clamp_max`, `logit`, `relu`, `sigmoid`, `tanh`,
+`softplus`, `elu`, `selu`, `silu`, `gelu`, `exp`, `expm1`, `log`, `log2`,
+`log10`, `erf`, `erfc`, `sinc`, `sqrt`, `abs` are thin wrappers around the
+corresponding tensor methods.
 
 Other module helpers:
 
@@ -1480,6 +1497,7 @@ torch.get_default_dtype()
 torch.dtype_name(dtype)
 torch.get_num_threads() / torch.set_num_threads(n)
 torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / gather / scatter / multinomial
+torch.take(t, index)             -- flattened 1-based gather
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
@@ -1489,6 +1507,7 @@ torch.addcmul(input, t1, t2, value?) / torch.addcdiv(input, t1, t2, value?)
 torch.lerp(input, end_tensor, weight)
 torch.logaddexp(a, b) / torch.logaddexp2(a, b) / torch.hypot(a, b)
 torch.frac(t)
+torch.logit(t, eps?) / torch.clamp_min(t, v) / torch.clamp_max(t, v)
 torch.softplus(t, beta?, threshold?) / torch.elu(t, alpha?)
 torch.selu(t) / torch.silu(t) / torch.gelu(t, approximate?)
 torch.ger(a, b)                  -- outer product of two vectors
@@ -1498,6 +1517,7 @@ torch.diag_embed(a, diagonal?) / torch.diagflat(a, diagonal?)
 torch.tril_indices(row, col, diagonal?, opts?)
 torch.triu_indices(row, col, diagonal?, opts?)
 torch.tensordot(a, b, dims?)
+torch.broadcast_shapes(...) / torch.broadcast_tensors(...)
 torch.einsum(equation, ...)      -- validated Einstein summation
 torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates

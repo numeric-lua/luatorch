@@ -771,6 +771,21 @@ function Tensor:index_select(dim, indices)
   return wrap(lib.lt_index_select(self.h, self:_cdim(dim), zero_based.h))
 end
 
+-- Flattened 1-based gather: the index tensor's shape is the output shape and
+-- its values address elements in row-major order. The selected values stay
+-- differentiable through index_select.
+function Tensor:take(index)
+  if not is_tensor(index) then
+    error("take expects an integer index tensor", 3)
+  end
+  local dtype = index:dtype_id()
+  if dtype ~= 2 and dtype ~= 3 and dtype ~= 4 and dtype ~= 5 then
+    error("take expects an int8/int16/int32/int64 index tensor", 3)
+  end
+  local selected = self:reshape(-1):index_select(1, index:reshape(-1))
+  return selected:reshape(index:sizes())
+end
+
 function Tensor:index_select_batch(dim, indices_list)
   if type(indices_list) ~= "table" or #indices_list == 0 then
     error("index_select_batch expects a non-empty table of index tensors", 3)
@@ -1156,6 +1171,49 @@ function Tensor:gelu(approximate)
   end
   local scaled = self:div(math.sqrt(2))
   return self:mul(scaled:erf():add(1)):mul(0.5)
+end
+
+-- Inverse sigmoid: log(x / (1 - x)). With eps, the input is first clamped to
+-- [eps, 1 - eps] so exact 0/1 inputs produce finite values.
+function Tensor:logit(eps)
+  activation_dtype(self, "logit")
+  local input = self
+  if eps ~= nil then
+    if type(eps) ~= "number" or eps ~= eps or eps < 0 or eps >= 0.5 then
+      error("logit eps must be a number in [0, 0.5)", 3)
+    end
+    input = self:clamp(eps, 1 - eps)
+  end
+  return input:div(input:neg():add(1)):log()
+end
+
+local function clamp_bound(tensor, value, name)
+  activation_dtype(tensor, name)
+  if type(value) ~= "number" or value ~= value then
+    error(name .. " bound must be a number", 3)
+  end
+end
+
+function Tensor:clamp_min(minimum)
+  clamp_bound(self, minimum, "clamp_min")
+  local threshold = full_like_value(self, minimum)
+  local mask = self:lt(minimum)
+  return wrap(lib.lt_where(mask.h, threshold.h, self.h))
+end
+
+function Tensor:clamp_min_(minimum)
+  return self:copy_(self:clamp_min(minimum))
+end
+
+function Tensor:clamp_max(maximum)
+  clamp_bound(self, maximum, "clamp_max")
+  local threshold = full_like_value(self, maximum)
+  local mask = self:gt(maximum)
+  return wrap(lib.lt_where(mask.h, threshold.h, self.h))
+end
+
+function Tensor:clamp_max_(maximum)
+  return self:copy_(self:clamp_max(maximum))
 end
 
 local function comparison_method(name, tensor_fn, scalar_fn)

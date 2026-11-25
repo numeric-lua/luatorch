@@ -63,6 +63,18 @@ All notable changes to luatorch are recorded here. The format follows
 - `torch.silu` / `Tensor:silu()` computes `x * sigmoid(x)`;
 - `torch.gelu` / `Tensor:gelu(approximate?)` computes the exact `erf` form by
   default and the standard tanh approximation with `approximate = "tanh"`;
+- `torch.broadcast_shapes(...)` returns the broadcast result of shape tables
+  (varargs, a single table of shapes, or no arguments), and
+  `torch.broadcast_tensors(...)` expands every input to that shape and returns
+  the views; both accept a single table argument as well as varargs;
+- `torch.take` / `Tensor:take(index)` performs a flattened 1-based gather whose
+  output shape is the index shape, with int8/int16/int32/int64 indices and
+  autograd through `index_select`;
+- `torch.logit` / `Tensor:logit(eps?)` is the inverse sigmoid with an optional
+  `eps` clamp to `[eps, 1-eps]`;
+- `torch.clamp_min` / `Tensor:clamp_min(value)` and `torch.clamp_max` /
+  `Tensor:clamp_max(value)` are one-sided clamps with `_` in-place variants for
+  floating-point tensors, preserving NaN entries;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
@@ -75,14 +87,18 @@ All notable changes to luatorch are recorded here. The format follows
   complement identity, `sinc` values, and gradients;
 - `tests/test_activations.lua` covers softplus/ELU/SELU/SiLU/GELU values,
   thresholds, exact vs tanh GELU, float16 behavior, gradients, and validation
+  errors;
+- `tests/test_utils_extra.lua` covers broadcast shape merging, expanded tensor
+  views, flattened 1-based `take` and its gradients, `logit` values/clamping,
+  `clamp_min`/`clamp_max` NaN preservation and gradients, and validation
   errors.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
-  elementwise/math helpers, unary functions, and activation helpers. The
-  unary functions add six shim entry points; the activation helpers are pure
-  Lua composites over existing tensor operations.
+  elementwise/math helpers, unary functions, activation helpers, and tensor
+  utilities. The unary functions add six shim entry points; the activation and
+  utility helpers are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24
 

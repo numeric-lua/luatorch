@@ -369,6 +369,89 @@ function torch.where(condition, a, b)
   return Tensor._wrap(lib.lt_where(condition.h, a.h, b.h))
 end
 
+-- Broadcast shape utilities. Shapes are Lua tables; a single table of shape
+-- tables is accepted as well as varargs.
+function torch.broadcast_shapes(...)
+  local shapes = { ... }
+  if #shapes == 1 and type(shapes[1]) == "table" and
+      (#shapes[1] == 0 or type(shapes[1][1]) == "table") then
+    shapes = shapes[1]
+  end
+  local result = {}
+  for i = 1, #shapes do
+    local shape = shapes[i]
+    if type(shape) ~= "table" then
+      error("broadcast_shapes expects shape tables", 2)
+    end
+    for d = 1, #shape do
+      local value = shape[d]
+      if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+          value < 0 or value == math.huge then
+        error("broadcast_shapes expects non-negative integer sizes", 2)
+      end
+    end
+    local max_length = math.max(#result, #shape)
+    local merged = {}
+    for position = 1, max_length do
+      local result_index = position - (max_length - #result)
+      local shape_index = position - (max_length - #shape)
+      local a = result_index >= 1 and result[result_index] or nil
+      local b = shape_index >= 1 and shape[shape_index] or nil
+      if a == nil then
+        merged[position] = b
+      elseif b == nil then
+        merged[position] = a
+      elseif a == b then
+        merged[position] = a
+      elseif a == 1 then
+        merged[position] = b
+      elseif b == 1 then
+        merged[position] = a
+      else
+        error("broadcast_shapes: incompatible shapes", 2)
+      end
+    end
+    result = merged
+  end
+  return result
+end
+
+-- Broadcast a list of tensors to a common shape and return expanded views.
+function torch.broadcast_tensors(...)
+  local tensors = { ... }
+  if #tensors == 1 and type(tensors[1]) == "table" and
+      (#tensors[1] == 0 or Tensor.is_tensor(tensors[1][1])) then
+    tensors = tensors[1]
+  end
+  if #tensors == 0 then
+    error("broadcast_tensors expects at least one tensor", 2)
+  end
+  local shapes = {}
+  for i = 1, #tensors do
+    if not Tensor.is_tensor(tensors[i]) then
+      error("broadcast_tensors expects tensors", 2)
+    end
+    shapes[i] = tensors[i]:sizes()
+  end
+  local shape = torch.broadcast_shapes(unpack(shapes))
+  local result = {}
+  for i = 1, #tensors do
+    local tensor = tensors[i]
+    local sizes = {}
+    local offset = #shape - tensor:dim()
+    for d = 1, #shape do
+      local source = d - offset
+      if source >= 1 and tensor:size(source) ~= 1 then
+        sizes[d] = tensor:size(source)
+      else
+        sizes[d] = shape[d]
+      end
+    end
+    result[i] = tensor:expand(unpack(sizes))
+  end
+  return unpack(result)
+end
+
 -- Torch7-style typed constructors -------------------------------------------
 
 local function typed_constructor(dtype)
@@ -489,6 +572,24 @@ torch.argmin = function(t, dim, keepdim) return t:argmin(dim, keepdim) end
 torch.transpose = function(t, d1, d2) return t:transpose(d1, d2) end
 torch.reshape = function(t, ...) return t:reshape(...) end
 torch.clamp = function(t, lo, hi) return t:clamp(lo, hi) end
+function torch.clamp_min(input, minimum)
+  if not Tensor.is_tensor(input) then
+    error("torch.clamp_min expects a tensor", 2)
+  end
+  return input:clamp_min(minimum)
+end
+function torch.clamp_max(input, maximum)
+  if not Tensor.is_tensor(input) then
+    error("torch.clamp_max expects a tensor", 2)
+  end
+  return input:clamp_max(maximum)
+end
+function torch.logit(input, eps)
+  if not Tensor.is_tensor(input) then
+    error("torch.logit expects a tensor", 2)
+  end
+  return input:logit(eps)
+end
 torch.relu = function(t) return t:relu() end
 torch.sigmoid = function(t) return t:sigmoid() end
 torch.tanh = function(t) return t:tanh() end
@@ -876,6 +977,13 @@ end
 
 function torch.gather(tensor, dim, index)
   return tensor:gather(dim, index)
+end
+
+function torch.take(tensor, index)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.take expects a tensor as its first argument", 2)
+  end
+  return tensor:take(index)
 end
 
 function torch.scatter(tensor, dim, index, source)
