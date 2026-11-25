@@ -298,8 +298,19 @@ Plus:
 
 ```lua
 t:clamp(min, max)     t:clamp_(min, max)
+t:addcmul(t1, t2, value?)   -- self + value * (t1 * t2)
+t:addcdiv(t1, t2, value?)   -- self + value * (t1 / t2)
+t:lerp(end, weight)         -- self + weight * (end - self)
 t:fill_(value)        t:zero_()
 ```
+
+`addcmul` and `addcdiv` multiply or divide two tensors, scale the result by
+`value` (default `1`), and add it to the input. Broadcasting follows the
+ordinary elementwise rules, bool inputs are rejected, and autograd flows to
+all operands. `lerp` interpolates between two floating-point tensors; `weight`
+may be a number or a broadcastable tensor of the same dtype, and gradients flow
+to both endpoints and a tensor weight. `torch.addcmul`, `torch.addcdiv`, and
+`torch.lerp` are the module-level forms.
 
 ## Linear algebra
 
@@ -1154,6 +1165,8 @@ t:max(dim?, keepdim?)          -- values[, indices] when dim is given
 t:min(dim?, keepdim?)          -- values[, indices] when dim is given
 t:aminmax(dim?, keepdim?)      -- minimum and maximum values only
 t:count_nonzero(dim?)          -- number of non-zero entries (int64)
+t:nansum(dim?, keepdim?)       -- sum ignoring NaN
+t:nanmean(dim?, keepdim?)      -- mean ignoring NaN (floating dtypes)
 t:argmax(dim?, keepdim?)       -- 1-based indices
 t:argmin(dim?, keepdim?)
 t:var(dim?, unbiased?, keepdim?)
@@ -1190,6 +1203,19 @@ local t = torch.tensor({{1, 0, 3}, {0, 5, 0}})
 t:count_nonzero():item()        -- 3
 t:count_nonzero(1):totable()    -- {1, 1, 1}
 t:count_nonzero({1, 2}):item()  -- 3
+```
+
+`nansum` and `nanmean` reduce while treating NaNs as missing. `nansum` returns
+zero for an all-NaN slice and accepts every dtype; `nanmean` divides by the
+number of non-NaN entries, returns NaN for an all-NaN slice, and requires a
+floating-point dtype. Infinities are ordinary values, and gradients pass only
+through non-NaN entries:
+
+```lua
+local t = torch.tensor({{0 / 0, 2}, {3, 4}}, {dtype = torch.float64})
+print(t:nansum():item())       -- 9
+print(t:nanmean():item())      -- 3
+print(t:nanmean(2):totable())  -- {2, 3.5}
 ```
 
 `trapezoid` applies the trapezoidal rule along one dimension and removes that
@@ -1311,17 +1337,23 @@ print(torch.tensor({0/0}):allclose(torch.tensor({0/0}), nil, nil, true))
 ```lua
 torch.isnan(t)          -- bool tensor, true where the value is NaN
 torch.isinf(t)          -- bool tensor, true where the value is +/-Inf
+torch.isposinf(t)       -- bool tensor, true only for +Inf
+torch.isneginf(t)       -- bool tensor, true only for -Inf
 torch.isfinite(t)       -- bool tensor, true where neither NaN nor +/-Inf
                         -- integer and bool inputs are always finite
 t:isnan()               -- method aliases
 t:isinf()
+t:isposinf()
+t:isneginf()
 t:isfinite()
 ```
 
 The result has the same shape as the input and never participates in autograd:
 predicates return a detached bool tensor even when the input requires grad.
 Float16/32/64 values are checked; integer and bool tensors produce all-true
-masks, like PyTorch.
+masks, like PyTorch. `isposinf` and `isneginf` split the infinity mask by sign:
+`+Inf` is positive and `-Inf` negative, while NaN and finite values match
+neither. `torch.isposinf`/`torch.isneginf` are the module-level forms.
 
 `nan_to_num` replaces `NaN`, `+Inf`, and `-Inf` with finite numbers:
 
@@ -1384,6 +1416,9 @@ torch.get_num_threads() / torch.set_num_threads(n)
 torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / gather / scatter / multinomial
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
+torch.nansum(t, dim?, keepdim?) / torch.nanmean(t, dim?, keepdim?)
+torch.addcmul(input, t1, t2, value?) / torch.addcdiv(input, t1, t2, value?)
+torch.lerp(input, end_tensor, weight)
 torch.ger(a, b)                  -- outer product of two vectors
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
 torch.trace(a) / torch.diag(a, diagonal?)
@@ -1394,6 +1429,7 @@ torch.tensordot(a, b, dims?)
 torch.einsum(equation, ...)      -- validated Einstein summation
 torch.trapezoid(y, x?, opts?)    -- trapezoidal integration along one dim
 torch.isnan(t) / torch.isinf(t) / torch.isfinite(t)  -- bool predicates
+torch.isposinf(t) / torch.isneginf(t)  -- signed-infinity predicates
 torch.nan_to_num(t, nan?, posinf?, neginf?)  -- replace non-finite values
 torch.isclose(a, b, rtol?, atol?, equal_nan?)  -- elementwise bool tensor
 torch.linalg.matmul(a, b) / mm(a, b) / mv(a, b) / outer(a, b)

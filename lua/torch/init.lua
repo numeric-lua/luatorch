@@ -421,6 +421,24 @@ torch.sub = function(a, b) return a:sub(b) end
 torch.mul = function(a, b) return a:mul(b) end
 torch.div = function(a, b) return a:div(b) end
 torch.pow = function(a, b) return a:pow(b) end
+function torch.addcmul(input, first, second, value)
+  if not Tensor.is_tensor(input) then
+    error("torch.addcmul expects a tensor as its first argument", 2)
+  end
+  return input:addcmul(first, second, value)
+end
+function torch.addcdiv(input, first, second, value)
+  if not Tensor.is_tensor(input) then
+    error("torch.addcdiv expects a tensor as its first argument", 2)
+  end
+  return input:addcdiv(first, second, value)
+end
+function torch.lerp(input, end_tensor, weight)
+  if not Tensor.is_tensor(input) then
+    error("torch.lerp expects a tensor as its first argument", 2)
+  end
+  return input:lerp(end_tensor, weight)
+end
 torch.matmul = function(a, b) return a:matmul(b) end
 torch.mm = function(a, b) return a:mm(b) end
 torch.bmm = function(a, b) return a:bmm(b) end
@@ -498,6 +516,20 @@ function torch.isfinite(t)
   return t:isfinite()
 end
 
+function torch.isposinf(t)
+  if not Tensor.is_tensor(t) then
+    error("torch.isposinf expects a tensor", 2)
+  end
+  return t:isposinf()
+end
+
+function torch.isneginf(t)
+  if not Tensor.is_tensor(t) then
+    error("torch.isneginf expects a tensor", 2)
+  end
+  return t:isneginf()
+end
+
 function torch.nan_to_num(t, nan, posinf, neginf)
   if not Tensor.is_tensor(t) then
     error("torch.nan_to_num expects a tensor", 2)
@@ -519,6 +551,20 @@ function torch.count_nonzero(t, dim)
     error("torch.count_nonzero expects a tensor", 2)
   end
   return t:count_nonzero(dim)
+end
+
+function torch.nansum(t, dim, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.nansum expects a tensor", 2)
+  end
+  return t:nansum(dim, keepdim)
+end
+
+function torch.nanmean(t, dim, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.nanmean expects a tensor", 2)
+  end
+  return t:nanmean(dim, keepdim)
 end
 
 -- neural-network primitives -------------------------------------------------

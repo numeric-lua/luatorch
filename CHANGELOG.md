@@ -3,6 +3,39 @@
 All notable changes to luatorch are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `torch.isposinf` / `Tensor:isposinf()` and `torch.isneginf` /
+  `Tensor:isneginf()` return detached bool masks that split infinities by
+  sign; NaN and finite values match neither, and integer/bool inputs produce
+  all-false masks;
+- `torch.nansum` / `Tensor:nansum(dim?, keepdim?)` sums while treating NaNs as
+  missing, returns zero for an all-NaN slice, keeps infinities as ordinary
+  values, and passes gradients only through non-NaN entries;
+- `torch.nanmean` / `Tensor:nanmean(dim?, keepdim?)` averages over the
+  non-NaN entries per slice, returns NaN when a slice has no valid entries,
+  requires float16/float32/float64, and passes gradients only through non-NaN
+  entries;
+- `torch.addcmul` / `Tensor:addcmul(t1, t2, value?)` computes
+  `self + value * (t1 * t2)` and `torch.addcdiv` / `Tensor:addcdiv` computes
+  `self + value * (t1 / t2)`, with broadcasting, a default `value` of 1,
+  bool rejection, and autograd through all operands;
+- `torch.lerp` / `Tensor:lerp(end, weight)` interpolates
+  `self + weight * (end - self)` for float16/float32/float64 inputs, with a
+  scalar or broadcastable same-dtype weight and gradients to both endpoints
+  and a tensor weight;
+- `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
+  reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
+  gradients, `lerp` with scalar/tensor weights, and validation errors.
+
+### Changed
+
+- `docs/api.md` and its docs guards describe the new predicates, reductions,
+  and elementwise helpers. All changes are pure Lua; no C++ shim or FFI
+  declaration changed.
+
 ## [0.34.0] — 2026-11-24
 
 ### Added

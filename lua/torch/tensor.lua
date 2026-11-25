@@ -961,6 +961,64 @@ Tensor.cmul_ = Tensor.mul_
 Tensor.cdiv = Tensor.div
 Tensor.cdiv_ = Tensor.div_
 
+local function addc_operation(self, first, second, value, divide, name)
+  if not is_tensor(first) or not is_tensor(second) then
+    error(name .. " expects two tensors", 3)
+  end
+  if self:dtype() == "bool" or first:dtype() == "bool" or
+      second:dtype() == "bool" then
+    error(name .. " does not support bool tensors", 3)
+  end
+  value = value == nil and 1 or value
+  if type(value) ~= "number" then
+    error(name .. " value must be a number", 3)
+  end
+  local product
+  if divide then
+    product = first:div(second)
+  else
+    product = first:mul(second)
+  end
+  if value ~= 1 then
+    product = product:mul(value)
+  end
+  return self:add(product)
+end
+
+function Tensor:addcmul(first, second, value)
+  return addc_operation(self, first, second, value, false, "addcmul")
+end
+
+function Tensor:addcdiv(first, second, value)
+  return addc_operation(self, first, second, value, true, "addcdiv")
+end
+
+-- Linear interpolation: self + weight * (other - self). The weight may be a
+-- number or a tensor broadcast against the inputs; all operands are floating
+-- point and share a dtype.
+function Tensor:lerp(other, weight)
+  if not is_tensor(other) then
+    error("lerp expects an end tensor", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error("lerp supports float16, float32, and float64 tensors", 3)
+  end
+  if other:dtype() ~= dtype then
+    error("lerp expects both inputs to share a dtype", 3)
+  end
+  if weight == nil then
+    error("lerp expects a weight", 3)
+  end
+  if type(weight) ~= "number" and not is_tensor(weight) then
+    error("lerp weight must be a number or a tensor", 3)
+  end
+  if is_tensor(weight) and weight:dtype() ~= dtype then
+    error("lerp weight must match the input dtype", 3)
+  end
+  return self:add(other:sub(self):mul(weight))
+end
+
 local function comparison_method(name, tensor_fn, scalar_fn)
   Tensor[name] = function(self, other)
     if is_tensor(other) then
@@ -1002,6 +1060,14 @@ end
 
 function Tensor:isfinite()
   return wrap(lib.lt_isfinite(self.h))
+end
+
+function Tensor:isposinf()
+  return self:isinf():logical_and(self:gt(0))
+end
+
+function Tensor:isneginf()
+  return self:isinf():logical_and(self:lt(0))
 end
 
 local nan_to_num_limits = {
@@ -2939,6 +3005,31 @@ function Tensor:count_nonzero(dim)
     counts = counts:sum(dims[i])
   end
   return counts
+end
+
+-- Sum ignoring NaNs. Non-finite infinities are kept, and an all-NaN slice
+-- sums to zero. NaN entries contribute zero gradient through the where.
+function Tensor:nansum(dim, keepdim)
+  local mask = self:isnan()
+  local zeros = full_like_value(self, 0)
+  local replaced = wrap(lib.lt_where(mask.h, zeros.h, self.h))
+  return replaced:sum(dim, keepdim)
+end
+
+-- Mean ignoring NaNs. The denominator is the number of non-NaN entries in
+-- each slice, so an all-NaN slice returns NaN. Only floating-point inputs are
+-- accepted, matching PyTorch's nanmean.
+function Tensor:nanmean(dim, keepdim)
+  local dtype = self:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error("nanmean supports float16, float32, and float64 tensors", 3)
+  end
+  local mask = self:isnan()
+  local zeros = full_like_value(self, 0)
+  local replaced = wrap(lib.lt_where(mask.h, zeros.h, self.h))
+  local numerator = replaced:sum(dim, keepdim)
+  local counts = mask:logical_not():to("int64"):sum(dim, keepdim)
+  return numerator:div(counts:to(dtype))
 end
 
 -- ATen returns 0-based indices; Lua users expect 1-based ones, so shift.
