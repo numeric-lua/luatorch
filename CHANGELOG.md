@@ -26,14 +26,37 @@ All notable changes to luatorch are recorded here. The format follows
   `self + weight * (end - self)` for float16/float32/float64 inputs, with a
   scalar or broadcastable same-dtype weight and gradients to both endpoints
   and a tensor weight;
+- `torch.amin` / `Tensor:amin(dim?, keepdim?)` and `torch.amax` /
+  `Tensor:amax(...)` return values only and accept an integer, negative, or
+  table of distinct dimensions; table reductions run from the highest index
+  down so indices stay valid without `keepdim`;
+- `torch.nanvar` / `Tensor:nanvar(dim?, unbiased?, keepdim?)` and
+  `torch.nanstd` / `Tensor:nanstd(...)` extend the NaN-aware reductions to
+  variance and standard deviation. The valid count excludes NaNs, `unbiased`
+  defaults to true, slices with too few valid entries return NaN, only
+  floating-point dtypes are accepted, and gradients pass only through non-NaN
+  entries;
+- `torch.logaddexp` / `Tensor:logaddexp(other)` and `torch.logaddexp2` /
+  `Tensor:logaddexp2(other)` compute `log(exp(a) + exp(b))` in base e or 2 with
+  a max shift, broadcasting, shared floating dtype, and autograd;
+- `torch.hypot` / `Tensor:hypot(other)` computes `sqrt(a^2 + b^2)` for
+  broadcastable same-dtype floating tensors with a magnitude shift, returning
+  zero for `hypot(0, 0)`, keeping infinities infinite, and carrying autograd;
+- `torch.frac` / `Tensor:frac()` returns `self - trunc(self)`, the signed
+  fractional part for floating dtypes and zero for integer dtypes, with
+  autograd through the subtraction;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
-  gradients, `lerp` with scalar/tensor weights, and validation errors.
+  gradients, `lerp` with scalar/tensor weights, and validation errors;
+- `tests/test_math_extra.lua` covers `amin`/`amax` dimension forms,
+  `nanvar`/`nanstd` biased and unbiased behavior and gradients, stable
+  `logaddexp`/`logaddexp2` values, `hypot` zeros/infinities/broadcasting,
+  `frac` for floats and integers, and validation errors.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
-  and elementwise helpers. All changes are pure Lua; no C++ shim or FFI
+  and elementwise/math helpers. All changes are pure Lua; no C++ shim or FFI
   declaration changed.
 
 ## [0.34.0] — 2026-11-24

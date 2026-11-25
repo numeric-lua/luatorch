@@ -301,6 +301,10 @@ t:clamp(min, max)     t:clamp_(min, max)
 t:addcmul(t1, t2, value?)   -- self + value * (t1 * t2)
 t:addcdiv(t1, t2, value?)   -- self + value * (t1 / t2)
 t:lerp(end, weight)         -- self + weight * (end - self)
+t:logaddexp(other)          -- log(exp(self) + exp(other))
+t:logaddexp2(other)         -- log2(2^self + 2^other)
+t:hypot(other)              -- sqrt(self^2 + other^2)
+t:frac()                    -- self - trunc(self)
 t:fill_(value)        t:zero_()
 ```
 
@@ -311,6 +315,15 @@ all operands. `lerp` interpolates between two floating-point tensors; `weight`
 may be a number or a broadcastable tensor of the same dtype, and gradients flow
 to both endpoints and a tensor weight. `torch.addcmul`, `torch.addcdiv`, and
 `torch.lerp` are the module-level forms.
+
+`logaddexp`, `logaddexp2`, and `hypot` take two broadcastable floating-point
+tensors of the same dtype and are computed with max/magnitude shifts so large
+finite inputs do not overflow. `hypot` returns zero for `hypot(0, 0)` and keeps
+infinite inputs infinite. `frac` returns `self - trunc(self)`: the signed
+fractional part for floating dtypes and zero for integer dtypes, with
+autograd flowing through the subtraction. `torch.logaddexp`,
+`torch.logaddexp2`, `torch.hypot`, and `torch.frac` are the module-level
+forms.
 
 ## Linear algebra
 
@@ -1164,9 +1177,13 @@ t:prod(dim?, keepdim?)
 t:max(dim?, keepdim?)          -- values[, indices] when dim is given
 t:min(dim?, keepdim?)          -- values[, indices] when dim is given
 t:aminmax(dim?, keepdim?)      -- minimum and maximum values only
+t:amin(dim?, keepdim?)         -- min values; dim may be a table
+t:amax(dim?, keepdim?)         -- max values; dim may be a table
 t:count_nonzero(dim?)          -- number of non-zero entries (int64)
 t:nansum(dim?, keepdim?)       -- sum ignoring NaN
 t:nanmean(dim?, keepdim?)      -- mean ignoring NaN (floating dtypes)
+t:nanvar(dim?, unbiased?, keepdim?)  -- variance ignoring NaN
+t:nanstd(dim?, unbiased?, keepdim?)  -- standard deviation ignoring NaN
 t:argmax(dim?, keepdim?)       -- 1-based indices
 t:argmin(dim?, keepdim?)
 t:var(dim?, unbiased?, keepdim?)
@@ -1193,6 +1210,19 @@ both have the reduced shape, or the kept shape when `keepdim` is true.
 `torch.aminmax(t, dim?, keepdim?)` is the module-level form. NaN propagates
 through both values, like `min`/`max`.
 
+`amin` and `amax` return only the minimum or maximum values. `dim` may be an
+integer, a negative dimension, or a non-empty table of distinct dimensions;
+tables are reduced from the highest index down so the remaining dimensions
+stay valid when `keepdim` is false. `torch.amin` and `torch.amax` are the
+module-level forms:
+
+```lua
+local t = torch.tensor({{1, 5, 3}, {4, 2, 6}}, {dtype = torch.float64})
+print(t:amin(1):totable())   -- {1, 2, 3}
+print(t:amax(2):totable())   -- {5, 6}
+print(t:amin({1, 2}):item()) -- 1
+```
+
 `count_nonzero` returns an int64 tensor with the number of entries that are
 not zero (NaN counts as non-zero, matching PyTorch). With no dimension the
 result is 0-dim; `dim` may be an integer or a non-empty table of distinct
@@ -1216,6 +1246,19 @@ local t = torch.tensor({{0 / 0, 2}, {3, 4}}, {dtype = torch.float64})
 print(t:nansum():item())       -- 9
 print(t:nanmean():item())      -- 3
 print(t:nanmean(2):totable())  -- {2, 3.5}
+```
+
+`nanvar` and `nanstd` extend the same missing-data rule to variance and its
+square root. The valid count excludes NaNs, `unbiased` defaults to true, and a
+slice with too few valid entries (none, or one for the unbiased denominator)
+returns NaN. Floating-point dtypes are required, and gradients pass only
+through non-NaN entries:
+
+```lua
+local t = torch.tensor({1, 0 / 0, 3}, {dtype = torch.float64})
+print(t:nanvar():item())                 -- 2
+print(t:nanvar(nil, false):item())       -- 1
+print(t:nanstd():item())                 -- 1.4142
 ```
 
 `trapezoid` applies the trapezoidal rule along one dimension and removes that
@@ -1415,10 +1458,14 @@ torch.dtype_name(dtype)
 torch.get_num_threads() / torch.set_num_threads(n)
 torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / gather / scatter / multinomial
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
+torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
 torch.nansum(t, dim?, keepdim?) / torch.nanmean(t, dim?, keepdim?)
+torch.nanvar(t, dim?, unbiased?, keepdim?) / torch.nanstd(...)
 torch.addcmul(input, t1, t2, value?) / torch.addcdiv(input, t1, t2, value?)
 torch.lerp(input, end_tensor, weight)
+torch.logaddexp(a, b) / torch.logaddexp2(a, b) / torch.hypot(a, b)
+torch.frac(t)
 torch.ger(a, b)                  -- outer product of two vectors
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
 torch.trace(a) / torch.diag(a, diagonal?)

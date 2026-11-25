@@ -135,6 +135,13 @@ local function shape_to_cdata(shape)
   return array, n
 end
 
+-- A tensor of the same shape and dtype as `reference`, filled with `value`.
+-- Shared by nan_to_num, the NaN-aware reductions, hypot, and diag_embed.
+local function full_like_value(reference, value)
+  local array, ndim = shape_to_cdata(reference:sizes())
+  return wrap(lib.lt_full(ndim, array, value, reference:dtype_id()))
+end
+
 local function is_dtype_integral(dtype)
   return dtype ~= 0 and dtype ~= 1 and dtype ~= 8
 end
@@ -1019,6 +1026,65 @@ function Tensor:lerp(other, weight)
   return self:add(other:sub(self):mul(weight))
 end
 
+local function float_binary_operand(self, other, name)
+  if not is_tensor(other) then
+    error(name .. " expects a tensor", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error(name .. " supports float16, float32, and float64 tensors", 3)
+  end
+  if other:dtype() ~= dtype then
+    error(name .. " expects both tensors to share a dtype", 3)
+  end
+end
+
+-- log(exp(self) + exp(other)), computed with a max shift so large inputs do
+-- not overflow. Inputs broadcast and must share a floating dtype.
+function Tensor:logaddexp(other)
+  float_binary_operand(self, other, "logaddexp")
+  local difference = self:sub(other):abs()
+  local maximum = self:maximum(other)
+  return maximum:add(difference:neg():exp():log1p())
+end
+
+-- log2(2^self + 2^other), using the same stable shift in base 2.
+function Tensor:logaddexp2(other)
+  float_binary_operand(self, other, "logaddexp2")
+  local difference = self:sub(other):abs()
+  local maximum = self:maximum(other)
+  local ln2 = math.log(2)
+  return maximum:add(difference:mul(-ln2):exp():log1p():div(ln2))
+end
+
+-- sqrt(self^2 + other^2), scaled by the larger magnitude so large finite
+-- inputs do not overflow and infinite inputs stay infinite.
+function Tensor:hypot(other)
+  float_binary_operand(self, other, "hypot")
+  local absolute_self = self:abs()
+  local absolute_other = other:abs()
+  local big = absolute_self:maximum(absolute_other)
+  local small = absolute_self:minimum(absolute_other)
+  local zeros = full_like_value(self, 0)
+  local ratio = small:div(big)
+  local special = big:eq(0):logical_or(big:isinf())
+  ratio = wrap(lib.lt_where(special.h, zeros.h, ratio.h))
+  local result = big:mul(ratio:mul(ratio):add(1):sqrt())
+  -- C99 hypot(inf, nan) is inf; make the same choice when one magnitude is
+  -- infinite even though the maximum propagates NaN.
+  local infinite = self:isinf():logical_or(other:isinf())
+  return wrap(lib.lt_where(infinite.h,
+    full_like_value(self, math.huge).h, result.h))
+end
+
+-- Fractional part: self - trunc(self). Integer inputs return zero.
+function Tensor:frac()
+  if self:dtype() == "bool" then
+    error("frac does not support bool tensors", 3)
+  end
+  return self:sub(self:trunc())
+end
+
 local function comparison_method(name, tensor_fn, scalar_fn)
   Tensor[name] = function(self, other)
     if is_tensor(other) then
@@ -1081,11 +1147,6 @@ local nan_to_num_limits = {
     neginf = -1.7976931348623157e308,
   },
 }
-
-local function full_like_value(reference, value)
-  local array, ndim = shape_to_cdata(reference:sizes())
-  return wrap(lib.lt_full(ndim, array, value, reference:dtype_id()))
-end
 
 -- Replace NaN, +Inf, and -Inf with finite values. Floating tensors default to
 -- NaN -> 0 and infinities -> the largest/smallest finite value of the dtype.
@@ -2940,6 +3001,57 @@ function Tensor:min(dim, keepdim)
   return values, reduction(self, lib.lt_argmin, dim, keepdim):add(1)
 end
 
+local function extrema_dimensions(tensor, dim, name)
+  if type(dim) == "number" then
+    return { dimension_argument(dim, tensor:dim(), name) }
+  end
+  if type(dim) ~= "table" then
+    error(name .. " dim must be an integer or a table of integers", 3)
+  end
+  if #dim == 0 then
+    error(name .. " dim table must not be empty", 3)
+  end
+  local dims, seen = {}, {}
+  for i = 1, #dim do
+    local resolved = dimension_argument(dim[i], tensor:dim(), name)
+    if seen[resolved] then
+      error(name .. " dim table must not repeat dimensions", 3)
+    end
+    seen[resolved] = true
+    dims[#dims + 1] = resolved
+  end
+  table.sort(dims)
+  return dims
+end
+
+-- Minimum/maximum over one dimension or a table of dimensions, returning
+-- values only. Dimensions are reduced from the highest index down so the
+-- remaining indices stay valid when keepdim is false.
+local function extrema_dim(tensor, dim, keepdim, is_min, name)
+  if dim == nil then
+    if is_min then return tensor:min() end
+    return tensor:max()
+  end
+  local dims = extrema_dimensions(tensor, dim, name)
+  local values = tensor
+  for i = #dims, 1, -1 do
+    if is_min then
+      values = values:min(dims[i], keepdim)
+    else
+      values = values:max(dims[i], keepdim)
+    end
+  end
+  return values
+end
+
+function Tensor:amin(dim, keepdim)
+  return extrema_dim(self, dim, keepdim, true, "amin")
+end
+
+function Tensor:amax(dim, keepdim)
+  return extrema_dim(self, dim, keepdim, false, "amax")
+end
+
 -- Min and max values in one call, without materializing argmin/argmax. When
 -- `dim` is nil the result is two 0-dim tensors; otherwise both results have
 -- the reduced shape. `keepdim` is ignored without a dimension, matching
@@ -3030,6 +3142,46 @@ function Tensor:nanmean(dim, keepdim)
   local numerator = replaced:sum(dim, keepdim)
   local counts = mask:logical_not():to("int64"):sum(dim, keepdim)
   return numerator:div(counts:to(dtype))
+end
+
+-- Variance ignoring NaNs. The mean and squared deviations use only non-NaN
+-- entries; the denominator is the valid count minus the unbiased correction,
+-- and slices with too few valid entries return NaN.
+function Tensor:nanvar(dim, unbiased, keepdim)
+  if unbiased == nil then unbiased = true end
+  if type(unbiased) ~= "boolean" then
+    error("nanvar unbiased must be a boolean", 3)
+  end
+  local dtype = self:dtype()
+  if dtype ~= "float16" and dtype ~= "float32" and dtype ~= "float64" then
+    error("nanvar supports float16, float32, and float64 tensors", 3)
+  end
+  local mask = self:isnan()
+  local zeros = full_like_value(self, 0)
+  local replaced = wrap(lib.lt_where(mask.h, zeros.h, self.h))
+  local counts = mask:logical_not():to(dtype):sum(dim, keepdim)
+  local mean = replaced:sum(dim, keepdim):div(counts)
+  local centered = replaced:sub(mean)
+  local squared = centered:mul(centered)
+  squared = wrap(lib.lt_where(mask.h, zeros.h, squared.h))
+  local total = squared:sum(dim, keepdim)
+  local denominator = counts
+  if unbiased then
+    denominator = counts:sub(1)
+  end
+  local invalid
+  if unbiased then
+    invalid = counts:le(1)
+  else
+    invalid = counts:eq(0)
+  end
+  denominator = wrap(lib.lt_where(invalid.h,
+    full_like_value(counts, 0).h, denominator.h))
+  return total:div(denominator)
+end
+
+function Tensor:nanstd(dim, unbiased, keepdim)
+  return self:nanvar(dim, unbiased, keepdim):sqrt()
 end
 
 -- ATen returns 0-based indices; Lua users expect 1-based ones, so shift.

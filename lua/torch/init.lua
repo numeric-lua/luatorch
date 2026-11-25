@@ -439,6 +439,30 @@ function torch.lerp(input, end_tensor, weight)
   end
   return input:lerp(end_tensor, weight)
 end
+function torch.logaddexp(input, other)
+  if not Tensor.is_tensor(input) then
+    error("torch.logaddexp expects a tensor as its first argument", 2)
+  end
+  return input:logaddexp(other)
+end
+function torch.logaddexp2(input, other)
+  if not Tensor.is_tensor(input) then
+    error("torch.logaddexp2 expects a tensor as its first argument", 2)
+  end
+  return input:logaddexp2(other)
+end
+function torch.hypot(input, other)
+  if not Tensor.is_tensor(input) then
+    error("torch.hypot expects a tensor as its first argument", 2)
+  end
+  return input:hypot(other)
+end
+function torch.frac(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.frac expects a tensor", 2)
+  end
+  return input:frac()
+end
 torch.matmul = function(a, b) return a:matmul(b) end
 torch.mm = function(a, b) return a:mm(b) end
 torch.bmm = function(a, b) return a:bmm(b) end
@@ -448,6 +472,18 @@ torch.mean = function(t, dim, keepdim) return t:mean(dim, keepdim) end
 torch.prod = function(t, dim, keepdim) return t:prod(dim, keepdim) end
 torch.max = function(t, dim, keepdim) return t:max(dim, keepdim) end
 torch.min = function(t, dim, keepdim) return t:min(dim, keepdim) end
+function torch.amin(t, dim, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.amin expects a tensor", 2)
+  end
+  return t:amin(dim, keepdim)
+end
+function torch.amax(t, dim, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.amax expects a tensor", 2)
+  end
+  return t:amax(dim, keepdim)
+end
 torch.argmax = function(t, dim, keepdim) return t:argmax(dim, keepdim) end
 torch.argmin = function(t, dim, keepdim) return t:argmin(dim, keepdim) end
 torch.transpose = function(t, d1, d2) return t:transpose(d1, d2) end
@@ -565,6 +601,20 @@ function torch.nanmean(t, dim, keepdim)
     error("torch.nanmean expects a tensor", 2)
   end
   return t:nanmean(dim, keepdim)
+end
+
+function torch.nanvar(t, dim, unbiased, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.nanvar expects a tensor", 2)
+  end
+  return t:nanvar(dim, unbiased, keepdim)
+end
+
+function torch.nanstd(t, dim, unbiased, keepdim)
+  if not Tensor.is_tensor(t) then
+    error("torch.nanstd expects a tensor", 2)
+  end
+  return t:nanstd(dim, unbiased, keepdim)
 end
 
 -- neural-network primitives -------------------------------------------------
