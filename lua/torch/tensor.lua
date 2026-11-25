@@ -1185,8 +1185,11 @@ function Tensor:nan_to_num(nan, posinf, neginf)
 end
 
 local unary_fns = {
-  neg = lib.lt_neg, abs = lib.lt_abs, exp = lib.lt_exp, log = lib.lt_log,
-  log1p = lib.lt_log1p, sqrt = lib.lt_sqrt, rsqrt = lib.lt_rsqrt,
+  neg = lib.lt_neg, abs = lib.lt_abs, exp = lib.lt_exp,
+  expm1 = lib.lt_expm1, log = lib.lt_log, log1p = lib.lt_log1p,
+  log2 = lib.lt_log2, log10 = lib.lt_log10, erf = lib.lt_erf,
+  erfc = lib.lt_erfc, sinc = lib.lt_sinc, sqrt = lib.lt_sqrt,
+  rsqrt = lib.lt_rsqrt,
   sin = lib.lt_sin, cos = lib.lt_cos, tan = lib.lt_tan, asin = lib.lt_asin,
   acos = lib.lt_acos, atan = lib.lt_atan, sinh = lib.lt_sinh,
   cosh = lib.lt_cosh, tanh = lib.lt_tanh, sigmoid = lib.lt_sigmoid,

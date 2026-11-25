@@ -45,19 +45,32 @@ All notable changes to luatorch are recorded here. The format follows
 - `torch.frac` / `Tensor:frac()` returns `self - trunc(self)`, the signed
   fractional part for floating dtypes and zero for integer dtypes, with
   autograd through the subtraction;
+- `log2` and `log10` Tensor methods (with `_` in-place variants) compute
+  base-2 and base-10 logarithms through ATen, alongside `torch.log2` and
+  `torch.log10`;
+- `expm1` / `expm1_` compute `exp(x) - 1` with preserved precision near zero,
+  alongside `torch.expm1`;
+- `erf` / `erfc` (and `_` variants) compute the error and complementary error
+  functions, alongside `torch.erf` and `torch.erfc`;
+- `sinc` (`sinc_`) computes the normalized `sin(pi x)/(pi x)` with
+  `sinc(0) = 1`, alongside `torch.sinc`;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
 - `tests/test_math_extra.lua` covers `amin`/`amax` dimension forms,
   `nanvar`/`nanstd` biased and unbiased behavior and gradients, stable
   `logaddexp`/`logaddexp2` values, `hypot` zeros/infinities/broadcasting,
-  `frac` for floats and integers, and validation errors.
+  `frac` for floats and integers, and validation errors;
+- `tests/test_unary_extra.lua` covers `log2`/`log10` values, in-place and
+  float16 calls, `expm1` precision near zero, `erf`/`erfc` known values and
+  complement identity, `sinc` values, and gradients.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
-  and elementwise/math helpers. All changes are pure Lua; no C++ shim or FFI
-  declaration changed.
+  elementwise/math helpers, and unary functions. The earlier additions are pure
+  Lua; this cycle adds six unary shim entry points (`log2`, `log10`, `expm1`,
+  `erf`, `erfc`, `sinc`) plus their header and FFI declarations.
 
 ## [0.34.0] — 2026-11-24
 

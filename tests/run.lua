@@ -161,6 +161,7 @@ local files = {
   "test_linalg_build.lua",
   "test_elementwise_extra.lua",
   "test_math_extra.lua",
+  "test_unary_extra.lua",
   "test_random.lua",
   "test_autograd.lua",
   "test_nn.lua",

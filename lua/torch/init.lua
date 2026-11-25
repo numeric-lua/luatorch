@@ -493,7 +493,13 @@ torch.relu = function(t) return t:relu() end
 torch.sigmoid = function(t) return t:sigmoid() end
 torch.tanh = function(t) return t:tanh() end
 torch.exp = function(t) return t:exp() end
+torch.expm1 = function(t) return t:expm1() end
 torch.log = function(t) return t:log() end
+torch.log2 = function(t) return t:log2() end
+torch.log10 = function(t) return t:log10() end
+torch.erf = function(t) return t:erf() end
+torch.erfc = function(t) return t:erfc() end
+torch.sinc = function(t) return t:sinc() end
 torch.sqrt = function(t) return t:sqrt() end
 torch.abs = function(t) return t:abs() end
 

@@ -291,8 +291,16 @@ Comparisons return Boolean tensors: `eq`, `ne`, `lt`, `le`, `gt`, `ge`
 
 Unary methods (each has an `_` in-place version):
 
-`neg abs exp log log1p sqrt rsqrt sin cos tan asin acos atan sinh cosh tanh
-sigmoid relu floor ceil round trunc sign square reciprocal`
+`neg abs exp expm1 log log1p log2 log10 erf erfc sinc sqrt rsqrt sin cos tan
+asin acos atan sinh cosh tanh sigmoid relu floor ceil round trunc sign square
+reciprocal`
+
+`log2`/`log10` are base-2/base-10 logarithms, `expm1` is `exp(x) - 1` with
+preserved precision near zero, `erf`/`erfc` are the error and complementary
+error functions, and `sinc` is the normalized `sin(pi x)/(pi x)` with
+`sinc(0) = 1`. All are ATen-backed and differentiable, and the module-level
+forms are `torch.log2`, `torch.log10`, `torch.expm1`, `torch.erf`,
+`torch.erfc`, and `torch.sinc`.
 
 Plus:
 
@@ -1444,8 +1452,9 @@ model:load_safetensors("model.safetensors", { strip_prefix = "model." })
 
 `torch.add`, `sub`, `mul`, `div`, `pow`, `matmul`, `mm`, `bmm`, `dot`, `sum`,
 `mean`, `prod`, `max`, `min`, `argmax`, `argmin`, `transpose`, `reshape`,
-`clamp`, `relu`, `sigmoid`, `tanh`, `exp`, `log`, `sqrt`, `abs` are thin
-wrappers around the corresponding tensor methods.
+`clamp`, `relu`, `sigmoid`, `tanh`, `exp`, `expm1`, `log`, `log2`, `log10`,
+`erf`, `erfc`, `sinc`, `sqrt`, `abs` are thin wrappers around the
+corresponding tensor methods.
 
 Other module helpers:
 
