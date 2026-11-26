@@ -1233,6 +1233,41 @@ function torch.unique(tensor, sorted_flag, return_inverse, return_counts)
   return tensor:unique(sorted_flag, return_inverse, return_counts)
 end
 
+function torch.unique_consecutive(tensor, return_inverse, return_counts)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.unique_consecutive expects a tensor", 2)
+  end
+  return tensor:unique_consecutive(return_inverse, return_counts)
+end
+
+function torch.fmax(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.fmax expects a tensor as its first argument", 2)
+  end
+  return a:fmax(b)
+end
+
+function torch.fmin(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.fmin expects a tensor as its first argument", 2)
+  end
+  return a:fmin(b)
+end
+
+function torch.kthvalue(tensor, k, dim, keepdim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.kthvalue expects a tensor", 2)
+  end
+  return tensor:kthvalue(k, dim, keepdim)
+end
+
+function torch.logcumsumexp(tensor, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.logcumsumexp expects a tensor", 2)
+  end
+  return tensor:logcumsumexp(dim)
+end
+
 function torch.multinomial(tensor, num_samples, replacement)
   return tensor:multinomial(num_samples, replacement)
 end

@@ -113,6 +113,17 @@ All notable changes to luatorch are recorded here. The format follows
   insertion positions from a 1-D sorted sequence, and
   `torch.bucketize(input, boundaries, right?)` applies the same search to any
   input shape;
+- `torch.fmax` / `Tensor:fmax(other)` and `torch.fmin` / `Tensor:fmin(other)`
+  return the other operand when either side is NaN, NaN when both are, and
+  otherwise behave like `maximum`/`minimum`; they broadcast, require matching
+  non-bool dtypes, and carry autograd;
+- `torch.kthvalue` / `Tensor:kthvalue(k, dim?, keepdim?)` returns the k-th
+  smallest value and its 1-based index along a dimension;
+- `torch.unique_consecutive` / `Tensor:unique_consecutive(inverse?, counts?)`
+  collapses adjacent equal elements of the flattened input with optional
+  1-based inverse indices and run counts;
+- `torch.logcumsumexp` / `Tensor:logcumsumexp(dim?)` accumulates a stable
+  log-sum-exp along the selected dimension (last by default);
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
@@ -138,15 +149,20 @@ All notable changes to luatorch are recorded here. The format follows
   gradients, and `atleast_1d`/`2d`/`3d` rank promotion;
 - `tests/test_linalg_construction.lua` covers `kron` values and gradients,
   stacking layouts and gradients, `cartesian_prod` ordering and gradients,
-  `searchsorted` left/right positions, and `bucketize` shapes.
+  `searchsorted` left/right positions, and `bucketize` shapes;
+- `tests/test_reduce_extra.lua` covers `fmax`/`fmin` NaN behavior and
+  gradients, `kthvalue` values/indices and errors, `unique_consecutive`
+  inverse/counts and empty/bool inputs, and `logcumsumexp` values and
+  gradients.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
   elementwise/math helpers, unary functions, activation helpers, tensor
-  utilities, splitting/axis helpers, and construction/search helpers. The
-  unary functions add six shim entry points; the activation, utility, sequence,
-  split, and construction helpers are pure Lua composites.
+  utilities, splitting/axis helpers, construction/search helpers, and
+  NaN/extrema/sorting helpers. The unary functions add six shim entry points;
+  the activation, utility, sequence, split, construction, and reduction helpers
+  are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24
 

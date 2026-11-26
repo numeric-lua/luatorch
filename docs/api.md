@@ -259,6 +259,8 @@ t:topk(k, dim?, largest?, sorted?) -- values, 1-based indices
 t:take_along_dim(indices, dim?)    -- gather along a dimension
 t:take(index)                      -- flattened 1-based gather; index shape is output
 t:unique(sorted?, inverse?, counts?) -- values[, inverse, counts]; inverse is 1-based
+t:unique_consecutive(inverse?, counts?) -- collapse adjacent duplicates
+t:kthvalue(k, dim?, keepdim?)      -- k-th value and 1-based index
 t:median(dim?)                    -- median value or dimension median
 t:quantile(q, dim?, keepdim?)     -- interpolated quantile
 t:diff(n?, dim?)                  -- n-th discrete difference, default n=1, last dim
@@ -280,6 +282,12 @@ computes the `n`-th discrete difference along the last dimension by default;
 `n = 0` returns a clone, empty or length-1 dimensions produce an empty result,
 and subtraction carries autograd.
 
+`kthvalue(k, dim?, keepdim?)` sorts along the selected dimension (the last by
+default), returns the k-th smallest value and its 1-based index, and requires a
+positive `k` within the dimension size. `unique_consecutive(inverse?, counts?)`
+collapses only adjacent equal elements of the flattened input and optionally
+returns 1-based inverse indices and per-run counts.
+
 `torch.searchsorted(sorted_sequence, values, right?)` binary-searches a 1-D
 sorted sequence and returns int64 insertion positions. Positions are **1-based**
 and range from 1 to `n + 1`; the default is the leftmost position, and `right`
@@ -294,7 +302,13 @@ Two-tensor and scalar variants:
 t:add(x)  t:sub(x)  t:mul(x)  t:div(x)  t:pow(x)  t:remainder(x)
 t:add_(x) ...                       -- in-place
 t:maximum(other)  t:minimum(other)  -- tensors only
+t:fmax(other)     t:fmin(other)     -- tensors only, ignore NaNs
 ```
+
+`fmax`/`fmin` return the other operand when either side is NaN, return NaN
+when both are, and otherwise behave like `maximum`/`minimum`; they broadcast
+and require matching non-bool dtypes. `torch.fmax`/`torch.fmin` are the
+module-level forms.
 
 Operators: `+ - * / ^` and unary `-`, including scalar-left forms
 (`2 - t`, `1 / t`, `2 ^ t`). `cmul`/`cdiv` are Torch7 aliases for
@@ -1289,6 +1303,7 @@ t:norm(p?, dim?, keepdim?)     -- p defaults to 2; math.huge supported
 t:logsumexp(dim?, keepdim?)
 t:cumsum(dim?)                 -- dim defaults to 1
 t:cumprod(dim?)
+t:logcumsumexp(dim?)           -- cumulative log-sum-exp
 t:trapezoid(x?, opts?)         -- integrate along a dimension
 t:all(dim?, keepdim?)
 t:any(dim?, keepdim?)
@@ -1357,6 +1372,11 @@ print(t:nanvar():item())                 -- 2
 print(t:nanvar(nil, false):item())       -- 1
 print(t:nanstd():item())                 -- 1.4142
 ```
+
+`logcumsumexp(dim?)` accumulates `log(sum(exp(...)))` along the selected
+dimension (the last by default) using stable `logaddexp` steps, so large
+exponents do not overflow. It is differentiable and empty dimensions return an
+empty result.
 
 `trapezoid` applies the trapezoidal rule along one dimension and removes that
 dimension from the result. `x` supplies the sample positions either as a 1-D
@@ -1570,6 +1590,9 @@ torch.searchsorted(sorted, values, right?)  -- 1-based insertion positions
 torch.bucketize(input, boundaries, right?)   -- 1-based bucket indices
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)
+torch.fmax(a, b) / torch.fmin(a, b)  -- NaN-ignoring extrema
+torch.kthvalue(t, k, dim?, keepdim?) / torch.unique_consecutive(t, ...)
+torch.logcumsumexp(t, dim?)       -- cumulative log-sum-exp
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
 torch.nansum(t, dim?, keepdim?) / torch.nanmean(t, dim?, keepdim?)
 torch.nanvar(t, dim?, unbiased?, keepdim?) / torch.nanstd(...)

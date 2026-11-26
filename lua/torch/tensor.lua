@@ -914,6 +914,27 @@ function Tensor:median(dim)
   return (values:get(lower) + values:get(upper)) / 2
 end
 
+-- k-th smallest value and its 1-based index along one dimension.
+function Tensor:kthvalue(k, dim, keepdim)
+  if type(k) ~= "number" or k ~= k or k % 1 ~= 0 or k <= 0 or
+      k == math.huge then
+    error("kthvalue k must be a positive integer", 3)
+  end
+  k = math.floor(k)
+  local axis = dim == nil and self:dim() or dim
+  if k > self:size(axis) then
+    error("kthvalue k is out of range for the selected dimension", 3)
+  end
+  local values, indices = self:sort(axis)
+  local value = values:narrow(axis, k, 1)
+  local index = indices:narrow(axis, k, 1)
+  if not keepdim then
+    value = value:squeeze(axis)
+    index = index:squeeze(axis)
+  end
+  return value, index
+end
+
 function Tensor:quantile(q, dim, keepdim)
   if type(q) ~= "number" or q ~= q or q < 0 or q > 1 then
     error("quantile q must be a number in [0, 1]", 3)
@@ -972,6 +993,36 @@ function Tensor:unique(sorted_flag, return_inverse, return_counts)
   return values, inverse, counts
 end
 
+-- Collapse only adjacent equal elements. The input is treated as flattened;
+-- optional inverse and counts match torch.unique_consecutive.
+function Tensor:unique_consecutive(return_inverse, return_counts)
+  local data = self:reshape(-1):totable()
+  local values, inverse, counts = {}, {}, {}
+  local current
+  for i = 1, #data do
+    local value = data[i]
+    if i == 1 or value ~= current then
+      current = value
+      values[#values + 1] = value
+      counts[#counts + 1] = 1
+    else
+      counts[#counts] = counts[#counts] + 1
+    end
+    inverse[i] = #values
+  end
+  local value_tensor = Tensor.from_table(values, { dtype = self:dtype_id() })
+  local inverse_tensor = Tensor.from_table(inverse, { dtype = 2 })
+  local count_tensor = Tensor.from_table(counts, { dtype = 2 })
+  if return_inverse and return_counts then
+    return value_tensor, inverse_tensor, count_tensor
+  elseif return_inverse then
+    return value_tensor, inverse_tensor
+  elseif return_counts then
+    return value_tensor, count_tensor
+  end
+  return value_tensor
+end
+
 -- ---------------------------------------------------------------------------
 -- elementwise operators
 -- ---------------------------------------------------------------------------
@@ -1011,6 +1062,37 @@ binary_method("remainder", lib.lt_remainder, lib.lt_remainder_scalar, false)
 binary_method("remainder", lib.lt_remainder, lib.lt_remainder_scalar, true)
 binary_method("maximum", lib.lt_maximum, nil, false)
 binary_method("minimum", lib.lt_minimum, nil, false)
+
+local function nan_extreme(self, other, name, is_maximum)
+  if not is_tensor(other) then
+    error(name .. " expects a tensor", 3)
+  end
+  if self:dtype_id() ~= other:dtype_id() then
+    error(name .. " expects both tensors to share a dtype", 3)
+  end
+  if self:dtype() == "bool" then
+    error(name .. " does not support bool tensors", 3)
+  end
+  local value
+  if is_maximum then
+    value = self:maximum(other)
+  else
+    value = self:minimum(other)
+  end
+  local self_nan, other_nan = self:isnan(), other:isnan()
+  -- If either side is NaN, return the other side; if both are NaN the first
+  -- selection returns the NaN from `other`.
+  local chosen = wrap(lib.lt_where(other_nan.h, self.h, value.h))
+  return wrap(lib.lt_where(self_nan.h, other.h, chosen.h))
+end
+
+function Tensor:fmax(other)
+  return nan_extreme(self, other, "fmax", true)
+end
+
+function Tensor:fmin(other)
+  return nan_extreme(self, other, "fmin", false)
+end
 
 -- Torch7 naming compatibility: cmul/cdiv are elementwise multiply/divide.
 Tensor.cmul = Tensor.mul
@@ -3691,6 +3773,24 @@ end
 
 function Tensor:cumprod(dim)
   return wrap(lib.lt_cumprod(self.h, self:_cdim(dim or 1)))
+end
+
+-- Cumulative log-sum-exp along one dimension, built from stable logaddexp
+-- steps and carrying autograd through the concatenated slices.
+function Tensor:logcumsumexp(dim)
+  local axis = dim == nil and self:dim() or dim
+  local length = self:size(axis)
+  if length == 0 then
+    return self:clone()
+  end
+  local parts = {}
+  local running = self:narrow(axis, 1, 1)
+  parts[1] = running
+  for i = 2, length do
+    running = running:logaddexp(self:narrow(axis, i, 1))
+    parts[i] = running
+  end
+  return cat_tensors(parts, self:_cdim(axis))
 end
 
 function Tensor:all(dim, keepdim)
