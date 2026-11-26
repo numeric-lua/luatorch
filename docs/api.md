@@ -254,12 +254,14 @@ t:index_select_batch(dim, {i1,i2}) -- one C call for several index tensors
 t:scatter(dim, index, source)      -- out-of-place, 1-based index tensor
 t:nonzero()                        -- 1-based coordinates, shape (N, ndim)
 t:sort(dim?, descending?)          -- values, 1-based indices
+t:argsort(dim?, descending?)       -- 1-based sort indices only
 t:topk(k, dim?, largest?, sorted?) -- values, 1-based indices
 t:take_along_dim(indices, dim?)    -- gather along a dimension
 t:take(index)                      -- flattened 1-based gather; index shape is output
 t:unique(sorted?, inverse?, counts?) -- values[, inverse, counts]; inverse is 1-based
 t:median(dim?)                    -- median value or dimension median
 t:quantile(q, dim?, keepdim?)     -- interpolated quantile
+t:diff(n?, dim?)                  -- n-th discrete difference, default n=1, last dim
 ```
 
 Examples:
@@ -271,6 +273,12 @@ m:slice(2, 2, 3)        -- 3x2, second and third columns
 m:slice(1, -2, -1)      -- last two rows
 m[m:gt(6)]              -- tensor([7, 8, 9, 10, 11, 12])
 ```
+
+`argsort` returns only the 1-based sort indices, with the same default
+dimension (the last one) and `descending` flag as `sort`. `diff(n?, dim?)`
+computes the `n`-th discrete difference along the last dimension by default;
+`n = 0` returns a clone, empty or length-1 dimensions produce an empty result,
+and subtraction carries autograd.
 
 ## Elementwise math
 
@@ -1194,6 +1202,9 @@ t:squeeze(dim?)         -- no dim: remove all size-1 dims
 t:unsqueeze(dim)
 t:flatten(start_dim?, end_dim?)
 t:expand(sizes...)
+t:roll(shifts, dims?)           -- circular shift; no dims flattens first
+t:tile(reps)                    -- repeat each dimension by reps
+t:repeat_interleave(repeats, dim?) -- repeat elements or slices
 torch.cat({t1, t2}, dim?)      -- default dim = 1
 torch.stack({t1, t2}, dim?)    -- default dim = 1
 torch.broadcast_shapes({2, 1}, {3})  -- {2, 3}
@@ -1205,6 +1216,12 @@ torch.broadcast_tensors(t1, t2)      -- expanded views, multiple returns
 tables, a single table of shape tables, or no arguments (empty shape).
 `broadcast_tensors` computes that common shape and returns one expanded view per
 input; it also accepts a single table of tensors.
+`roll` accepts an integer shift or equal-length shift/dim lists; without
+`dims` it flattens, rolls, and reshapes. `tile` pads missing repeats with 1 and
+promotes the input with leading size-1 dimensions when `reps` is longer.
+`repeat_interleave` takes a non-negative scalar or a 1-D integer tensor of
+repeats; without `dim` it flattens the input first. All three are
+differentiable through their underlying views and gathers.
 
 ## Reductions
 
@@ -1497,6 +1514,9 @@ torch.get_default_dtype()
 torch.dtype_name(dtype)
 torch.get_num_threads() / torch.set_num_threads(n)
 torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / gather / scatter / multinomial
+torch.argsort(t, dim?, descending?) / torch.diff(t, n?, dim?)
+torch.roll(t, shifts, dims?) / torch.tile(t, reps)
+torch.repeat_interleave(t, repeats, dim?)
 torch.take(t, index)             -- flattened 1-based gather
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)

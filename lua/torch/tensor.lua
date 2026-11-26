@@ -861,6 +861,41 @@ function Tensor:sort(dim, descending)
   return wrap(values_pointer[0]), wrap(indices_pointer[0]):add(1)
 end
 
+-- Sort indices without materializing the values.
+function Tensor:argsort(dim, descending)
+  local _, indices = self:sort(dim, descending)
+  return indices
+end
+
+-- n-th discrete difference along one dimension, using repeated first
+-- differences over narrowed views so autograd flows through subtraction.
+function Tensor:diff(n, dim)
+  n = n == nil and 1 or n
+  if type(n) ~= "number" or n ~= n or n % 1 ~= 0 or n < 0 or
+      n == math.huge then
+    error("diff n must be a non-negative integer", 3)
+  end
+  n = math.floor(n)
+  if self:dtype() == "bool" then
+    error("diff does not support bool tensors", 3)
+  end
+  local axis = dim == nil and self:dim() or dim
+  local result = self
+  if n == 0 then
+    return self:clone()
+  end
+  for _ = 1, n do
+    local length = result:size(axis)
+    if length <= 1 then
+      result = result:narrow(axis, 1, 0)
+    else
+      result = result:narrow(axis, 2, length - 1):sub(
+        result:narrow(axis, 1, length - 1))
+    end
+  end
+  return result
+end
+
 function Tensor:median(dim)
   if dim ~= nil then
     local values = self:sort(dim)
@@ -3097,6 +3132,171 @@ function Tensor:expand(...)
   local shape = shape_args(...)
   local array, ndim = shape_to_cdata(shape)
   return wrap(lib.lt_expand(self.h, ndim, array))
+end
+
+-- Circular shift. Without dims the tensor is flattened, rolled, and reshaped;
+-- with dims, shifts and dims may be integers or equally long lists.
+function Tensor:roll(shifts, dims)
+  local function normalize(value, name)
+    if type(value) == "number" then
+      return { value }
+    end
+    if type(value) ~= "table" or #value == 0 then
+      error(name .. " must be an integer or a non-empty table", 3)
+    end
+    return value
+  end
+  local shift_list = normalize(shifts, "roll shifts")
+  for i = 1, #shift_list do
+    local value = shift_list[i]
+    if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+        value == math.huge or value == -math.huge then
+      error("roll shifts must contain integers", 3)
+    end
+  end
+  if dims == nil then
+    if #shift_list ~= 1 then
+      error("roll without dims expects one shift", 3)
+    end
+    local flat = self:reshape(-1)
+    local length = flat:size(1)
+    if length == 0 then
+      return flat:reshape(self:sizes())
+    end
+    local shift = shift_list[1] % length
+    if shift == 0 then
+      return flat:reshape(self:sizes())
+    end
+    local result = cat_tensors({
+      flat:narrow(1, length - shift + 1, shift),
+      flat:narrow(1, 1, length - shift),
+    }, 0)
+    return result:reshape(self:sizes())
+  end
+
+  local dim_list = normalize(dims, "roll dims")
+  for i = 1, #dim_list do
+    local value = dim_list[i]
+    if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+        value == math.huge or value == -math.huge then
+      error("roll dims must contain integers", 3)
+    end
+  end
+  if #shift_list ~= #dim_list then
+    error("roll shifts and dims must have the same length", 3)
+  end
+  local result = self
+  for i = 1, #shift_list do
+    local dim = dim_list[i]
+    local length = result:size(dim)
+    if length > 0 then
+      local shift = shift_list[i] % length
+      if shift ~= 0 then
+        local tail = result:narrow(dim, length - shift + 1, shift)
+        local head = result:narrow(dim, 1, length - shift)
+        result = cat_tensors({ tail, head }, result:_cdim(dim))
+      end
+    end
+  end
+  return result
+end
+
+-- Tile a tensor by a table of repeats. Missing leading repeats default to 1
+-- and extra repeats promote the input with leading size-1 dimensions.
+function Tensor:tile(reps)
+  if type(reps) ~= "table" or #reps == 0 then
+    error("tile expects a non-empty table of repeats", 3)
+  end
+  for i = 1, #reps do
+    local value = reps[i]
+    if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or
+        value < 0 or value == math.huge then
+      error("tile repeats must be non-negative integers", 3)
+    end
+  end
+  local result = self
+  local rank = result:dim()
+  if #reps > rank then
+    local promoted = {}
+    for _ = 1, #reps - rank do promoted[#promoted + 1] = 1 end
+    for i = 1, rank do promoted[#promoted + 1] = result:size(i) end
+    result = result:reshape(promoted)
+    rank = #reps
+  elseif #reps < rank then
+    local padded = {}
+    for _ = 1, rank - #reps do padded[#padded + 1] = 1 end
+    for i = 1, #reps do padded[#padded + 1] = reps[i] end
+    reps = padded
+  end
+
+  for i = 1, #reps do
+    local repeats = reps[i]
+    if repeats ~= 1 then
+      local sizes = result:sizes()
+      local length = sizes[i]
+      local expanded = {}
+      for d = 1, #sizes do
+        if d == i then expanded[#expanded + 1] = repeats end
+        expanded[#expanded + 1] = sizes[d]
+      end
+      result = result:unsqueeze(i):expand(unpack(expanded))
+      local merged = {}
+      for d = 1, #sizes do
+        if d == i then
+          merged[#merged + 1] = repeats * length
+        else
+          merged[#merged + 1] = sizes[d]
+        end
+      end
+      result = result:reshape(merged)
+    end
+  end
+  return result
+end
+
+-- Repeat each element (dim given) or each flattened element (dim nil).
+function Tensor:repeat_interleave(repeats, dim)
+  local counts = {}
+  local length
+  if dim == nil then
+    length = self:numel()
+  else
+    length = self:size(dim)
+  end
+  if type(repeats) == "number" then
+    if repeats ~= repeats or repeats % 1 ~= 0 or repeats < 0 or
+        repeats == math.huge then
+      error("repeat_interleave repeats must be a non-negative integer", 3)
+    end
+    for i = 1, length do counts[i] = repeats end
+  elseif is_tensor(repeats) then
+    local dtype = repeats:dtype_id()
+    if dtype ~= 2 and dtype ~= 3 and dtype ~= 4 and dtype ~= 5 then
+      error("repeat_interleave repeats must be an integer tensor", 3)
+    end
+    if repeats:dim() ~= 1 or repeats:size(1) ~= length then
+      error("repeat_interleave repeats must be a 1-D tensor matching the " ..
+        "selected dimension", 3)
+    end
+    counts = repeats:to("int64"):totable()
+  else
+    error("repeat_interleave repeats must be a number or an integer tensor", 3)
+  end
+
+  local indices = {}
+  for i = 1, length do
+    local count = counts[i]
+    if type(count) ~= "number" or count ~= count or count % 1 ~= 0 or
+        count < 0 or count == math.huge then
+      error("repeat_interleave repeats must be non-negative integers", 3)
+    end
+    for _ = 1, count do indices[#indices + 1] = i end
+  end
+  local index_tensor = Tensor.from_table(indices, { dtype = 2 })
+  if dim == nil then
+    return self:reshape(-1):index_select(1, index_tensor)
+  end
+  return self:index_select(dim, index_tensor)
 end
 
 -- ---------------------------------------------------------------------------

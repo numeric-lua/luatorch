@@ -967,6 +967,41 @@ function torch.sort(tensor, dim, descending)
   return tensor:sort(dim, descending)
 end
 
+function torch.argsort(tensor, dim, descending)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.argsort expects a tensor", 2)
+  end
+  return tensor:argsort(dim, descending)
+end
+
+function torch.diff(tensor, n, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.diff expects a tensor", 2)
+  end
+  return tensor:diff(n, dim)
+end
+
+function torch.roll(tensor, shifts, dims)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.roll expects a tensor", 2)
+  end
+  return tensor:roll(shifts, dims)
+end
+
+function torch.tile(tensor, reps)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.tile expects a tensor", 2)
+  end
+  return tensor:tile(reps)
+end
+
+function torch.repeat_interleave(tensor, repeats, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.repeat_interleave expects a tensor", 2)
+  end
+  return tensor:repeat_interleave(repeats, dim)
+end
+
 function torch.topk(tensor, k, dim, largest, sorted_flag)
   return tensor:topk(k, dim, largest, sorted_flag)
 end
