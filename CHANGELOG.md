@@ -88,6 +88,18 @@ All notable changes to luatorch are recorded here. The format follows
 - `torch.repeat_interleave` / `Tensor:repeat_interleave(repeats, dim?)`
   repeats elements or slices from a non-negative scalar or 1-D integer repeats
   tensor, flattening first when `dim` is omitted;
+- `torch.split` / `Tensor:split(size_or_sections, dim?)` returns a Lua array
+  of views from a positive chunk size or explicit section sizes that must sum
+  to the dimension;
+- `torch.chunk` / `Tensor:chunk(chunks, dim?)` splits into at most `chunks`
+  roughly equal parts using `ceil(size/chunks)`;
+- `torch.unbind` / `Tensor:unbind(dim?)` removes a dimension and returns its
+  slices as a Lua array;
+- `torch.swapaxes` / `Tensor:swapaxes(d1, d2)` transposes two dimensions, and
+  `torch.moveaxis` / `Tensor:moveaxis(source, destination)` moves one or more
+  axes (also exposed as `torch.movedim`);
+- `torch.atleast_1d`, `torch.atleast_2d`, and `torch.atleast_3d` return each
+  input at the requested minimum rank, leaving already-large inputs unchanged;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
@@ -107,14 +119,18 @@ All notable changes to luatorch are recorded here. The format follows
   errors;
 - `tests/test_sequence_extra.lua` covers `argsort` indices, `diff` orders and
   gradients, flattened/dimension `roll`, rank-promoting `tile`, and scalar or
-  tensor `repeat_interleave`, including empty and error cases.
+  tensor `repeat_interleave`, including empty and error cases;
+- `tests/test_split_extra.lua` covers fixed/section `split`, `chunk` part
+  counts, `unbind` slices and gradients, `swapaxes`/`moveaxis` shapes and
+  gradients, and `atleast_1d`/`2d`/`3d` rank promotion.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
-  elementwise/math helpers, unary functions, activation helpers, and tensor
-  utilities. The unary functions add six shim entry points; the activation,
-  utility, and sequence helpers are pure Lua composites.
+  elementwise/math helpers, unary functions, activation helpers, tensor
+  utilities, and splitting/axis helpers. The unary functions add six shim
+  entry points; the activation, utility, sequence, and split helpers are pure
+  Lua composites.
 
 ## [0.34.0] — 2026-11-24
 

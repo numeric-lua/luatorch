@@ -3111,6 +3111,43 @@ function Tensor:permute(...)
   return wrap(lib.lt_permute(self.h, n, array))
 end
 
+function Tensor:swapaxes(dim0, dim1)
+  return self:transpose(dim0, dim1)
+end
+
+local function axis_list(value, name)
+  if type(value) == "number" then
+    return { value }
+  end
+  if type(value) == "table" and #value > 0 then
+    return value
+  end
+  error(name .. " must be an integer or a non-empty table", 3)
+end
+
+-- Move one or more axes to new positions, preserving the order of the other
+-- axes. Multiple moves are applied in sequence, matching NumPy/PyTorch.
+function Tensor:moveaxis(source, destination)
+  local sources = axis_list(source, "moveaxis source")
+  local destinations = axis_list(destination, "moveaxis destination")
+  if #sources ~= #destinations then
+    error("moveaxis source and destination must have the same length", 3)
+  end
+  local result = self
+  for i = 1, #sources do
+    local rank = result:dim()
+    local from = dimension_argument(sources[i], rank, "moveaxis")
+    local to = dimension_argument(destinations[i], rank, "moveaxis")
+    local order = {}
+    for d = 1, rank do
+      if d ~= from then order[#order + 1] = d end
+    end
+    table.insert(order, to, from)
+    result = result:permute(unpack(order))
+  end
+  return result
+end
+
 function Tensor:squeeze(dim)
   if dim == nil then
     return wrap(lib.lt_squeeze_all(self.h))
@@ -3132,6 +3169,73 @@ function Tensor:expand(...)
   local shape = shape_args(...)
   local array, ndim = shape_to_cdata(shape)
   return wrap(lib.lt_expand(self.h, ndim, array))
+end
+
+-- Split along one dimension into views. A number gives fixed-size chunks
+-- (the last may be shorter); a table gives explicit section sizes.
+function Tensor:split(split_size_or_sections, dim)
+  local axis = dim == nil and 1 or dim
+  local length = self:size(axis)
+  local parts = {}
+  if type(split_size_or_sections) == "table" then
+    local total = 0
+    for i = 1, #split_size_or_sections do
+      local size = split_size_or_sections[i]
+      if type(size) ~= "number" or size ~= size or size % 1 ~= 0 or
+          size < 0 or size == math.huge then
+        error("split sections must be non-negative integers", 3)
+      end
+      total = total + size
+    end
+    if total ~= length then
+      error("split sections must sum to the dimension size", 3)
+    end
+    local start = 1
+    for i = 1, #split_size_or_sections do
+      local size = split_size_or_sections[i]
+      parts[i] = self:narrow(axis, start, size)
+      start = start + size
+    end
+    return parts
+  end
+  if type(split_size_or_sections) ~= "number" or
+      split_size_or_sections ~= split_size_or_sections or
+      split_size_or_sections % 1 ~= 0 or split_size_or_sections <= 0 or
+      split_size_or_sections == math.huge then
+    error("split size must be a positive integer", 3)
+  end
+  local size = math.floor(split_size_or_sections)
+  local start = 1
+  while start <= length do
+    local part_size = math.min(size, length - start + 1)
+    parts[#parts + 1] = self:narrow(axis, start, part_size)
+    start = start + part_size
+  end
+  return parts
+end
+
+-- Split into at most `chunks` roughly equal parts along one dimension.
+function Tensor:chunk(chunks, dim)
+  if type(chunks) ~= "number" or chunks ~= chunks or chunks % 1 ~= 0 or
+      chunks <= 0 or chunks == math.huge then
+    error("chunk count must be a positive integer", 3)
+  end
+  local axis = dim == nil and 1 or dim
+  local length = self:size(axis)
+  local size = math.ceil(length / math.floor(chunks))
+  if size < 1 then size = 1 end
+  return self:split(size, axis)
+end
+
+-- Remove one dimension and return its slices as a Lua array.
+function Tensor:unbind(dim)
+  local axis = dim == nil and 1 or dim
+  local length = self:size(axis)
+  local parts = {}
+  for i = 1, length do
+    parts[i] = self:select(axis, i)
+  end
+  return parts
 end
 
 -- Circular shift. Without dims the tensor is flattened, rolled, and reshaped;

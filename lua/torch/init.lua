@@ -362,6 +362,27 @@ function torch.stack(tensors, dim)
   return Tensor._wrap(lib.lt_stack(array, n, cdim))
 end
 
+function torch.split(tensor, split_size_or_sections, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.split expects a tensor", 2)
+  end
+  return tensor:split(split_size_or_sections, dim)
+end
+
+function torch.chunk(tensor, chunks, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.chunk expects a tensor", 2)
+  end
+  return tensor:chunk(chunks, dim)
+end
+
+function torch.unbind(tensor, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.unbind expects a tensor", 2)
+  end
+  return tensor:unbind(dim)
+end
+
 function torch.where(condition, a, b)
   if not (Tensor.is_tensor(condition) and Tensor.is_tensor(a) and Tensor.is_tensor(b)) then
     error("torch.where expects three tensors", 2)
@@ -570,6 +591,57 @@ end
 torch.argmax = function(t, dim, keepdim) return t:argmax(dim, keepdim) end
 torch.argmin = function(t, dim, keepdim) return t:argmin(dim, keepdim) end
 torch.transpose = function(t, d1, d2) return t:transpose(d1, d2) end
+function torch.swapaxes(input, dim0, dim1)
+  if not Tensor.is_tensor(input) then
+    error("torch.swapaxes expects a tensor", 2)
+  end
+  return input:swapaxes(dim0, dim1)
+end
+function torch.moveaxis(input, source, destination)
+  if not Tensor.is_tensor(input) then
+    error("torch.moveaxis expects a tensor", 2)
+  end
+  return input:moveaxis(source, destination)
+end
+torch.movedim = torch.moveaxis
+
+local function atleast_rank(rank, tensors)
+  local result = {}
+  for i = 1, #tensors do
+    local tensor = tensors[i]
+    if not Tensor.is_tensor(tensor) then
+      error("atleast_* expects tensors", 2)
+    end
+    if tensor:dim() >= rank then
+      result[i] = tensor
+    else
+      local shape = {}
+      if rank == 1 then
+        shape = { 1 }
+      elseif rank == 2 then
+        if tensor:dim() == 0 then
+          shape = { 1, 1 }
+        else
+          shape = { 1, tensor:size(1) }
+        end
+      else
+        if tensor:dim() == 0 then
+          shape = { 1, 1, 1 }
+        elseif tensor:dim() == 1 then
+          shape = { 1, tensor:size(1), 1 }
+        else
+          shape = { tensor:size(1), tensor:size(2), 1 }
+        end
+      end
+      result[i] = tensor:reshape(shape)
+    end
+  end
+  return unpack(result)
+end
+
+function torch.atleast_1d(...) return atleast_rank(1, { ... }) end
+function torch.atleast_2d(...) return atleast_rank(2, { ... }) end
+function torch.atleast_3d(...) return atleast_rank(3, { ... }) end
 torch.reshape = function(t, ...) return t:reshape(...) end
 torch.clamp = function(t, lo, hi) return t:clamp(lo, hi) end
 function torch.clamp_min(input, minimum)

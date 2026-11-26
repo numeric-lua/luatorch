@@ -1205,6 +1205,12 @@ t:expand(sizes...)
 t:roll(shifts, dims?)           -- circular shift; no dims flattens first
 t:tile(reps)                    -- repeat each dimension by reps
 t:repeat_interleave(repeats, dim?) -- repeat elements or slices
+t:split(size_or_sections, dim?)   -- fixed-size or explicit sections
+t:chunk(chunks, dim?)             -- at most `chunks` roughly equal parts
+t:unbind(dim?)                    -- slices with one dimension removed
+t:swapaxes(dim1, dim2)            -- transpose two dimensions
+t:moveaxis(source, destination)   -- move one or more dimensions
+torch.atleast_1d(...) / torch.atleast_2d(...) / torch.atleast_3d(...)
 torch.cat({t1, t2}, dim?)      -- default dim = 1
 torch.stack({t1, t2}, dim?)    -- default dim = 1
 torch.broadcast_shapes({2, 1}, {3})  -- {2, 3}
@@ -1222,6 +1228,15 @@ promotes the input with leading size-1 dimensions when `reps` is longer.
 `repeat_interleave` takes a non-negative scalar or a 1-D integer tensor of
 repeats; without `dim` it flattens the input first. All three are
 differentiable through their underlying views and gathers.
+
+`split`, `chunk`, and `unbind` return Lua arrays of views. `split` takes a
+positive chunk size or a list of section sizes that must sum to the dimension;
+`chunk` computes `ceil(size/chunks)` and may return fewer than `chunks` parts;
+`unbind` removes the chosen dimension. `swapaxes` is a transpose alias and
+`moveaxis` accepts integer or equal-length source/destination lists (also
+available as `torch.movedim`). `atleast_1d`, `atleast_2d`, and `atleast_3d`
+return each input at the requested minimum rank, leaving already-large inputs
+unchanged; they return multiple values.
 
 ## Reductions
 
@@ -1517,6 +1532,10 @@ torch.sort / topk / unique / median / quantile / bincount / histc / nonzero / ga
 torch.argsort(t, dim?, descending?) / torch.diff(t, n?, dim?)
 torch.roll(t, shifts, dims?) / torch.tile(t, reps)
 torch.repeat_interleave(t, repeats, dim?)
+torch.split(t, size_or_sections, dim?) / torch.chunk(t, chunks, dim?)
+torch.unbind(t, dim?)
+torch.swapaxes(t, d1, d2) / torch.moveaxis(t, src, dst) / torch.movedim(...)
+torch.atleast_1d(...) / torch.atleast_2d(...) / torch.atleast_3d(...)
 torch.take(t, index)             -- flattened 1-based gather
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)
