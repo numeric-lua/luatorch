@@ -280,6 +280,12 @@ computes the `n`-th discrete difference along the last dimension by default;
 `n = 0` returns a clone, empty or length-1 dimensions produce an empty result,
 and subtraction carries autograd.
 
+`torch.searchsorted(sorted_sequence, values, right?)` binary-searches a 1-D
+sorted sequence and returns int64 insertion positions. Positions are **1-based**
+and range from 1 to `n + 1`; the default is the leftmost position, and `right`
+selects after equal elements. `torch.bucketize(input, boundaries, right?)` is
+the same search with the arguments reversed and accepts input of any shape.
+
 ## Elementwise math
 
 Two-tensor and scalar variants:
@@ -374,6 +380,7 @@ a:bmm(b)        -- batched 3-D matmul
 a:dot(b)        -- 1-D dot product
 a:mv(v)         -- matrix-vector product
 a:outer(v)      -- outer product
+a:kron(b)       -- Kronecker product, ranks aligned from the right
 a:addmm(m1, m2, beta?, alpha?)    -- beta*a + alpha*(m1 @ m2)
 a:baddbmm(m1, m2, beta?, alpha?)  -- batched addmm
 ```
@@ -426,6 +433,8 @@ torch.linalg.matmul(a, b)  -- broadcasting matrix product
 torch.linalg.mm(a, b)      -- 2-D matrix product
 torch.linalg.mv(a, v)      -- matrix-vector product
 torch.linalg.outer(a, b)   -- outer product of two 1-D tensors
+torch.kron(a, b)           -- Kronecker product
+torch.cartesian_prod(t1, t2, ...)  -- combinations as rows
 torch.linalg.inv(a)      torch.linalg.inv_ex(a, opts?)
 torch.linalg.tensorinv(a, ind?)
 torch.linalg.tensorsolve(a, b, dims?)
@@ -471,6 +480,16 @@ torch.linalg.matrix_exp(a)
 `torch.mm`/`Tensor:mm`, `torch.mv`/`Tensor:mv`, and
 `torch.outer`/`Tensor:outer`. They keep broadcasting, dtype promotion, and
 autograd, and each rejects a non-tensor operand with a Lua error.
+
+`torch.kron` / `Tensor:kron(other)` computes the Kronecker product with shapes
+aligned from the right; missing leading dimensions count as 1 and each output
+dimension is the product of the corresponding input dimensions. Scalars,
+vectors, matrices, and higher-rank inputs are supported, and autograd flows
+through the elementwise multiplication. `torch.cartesian_prod(t1, t2, ...)`
+takes 1-D tensors and returns a `(total combinations, count)` tensor whose rows
+enumerate the product with the first input varying slowest; an empty input
+produces zero rows. It is differentiable through `repeat_interleave`, `tile`,
+and `stack`.
 
 `tensorinv` inverts a tensor with respect to `torch.tensordot`. Its first
 `ind` dimensions (default 2) are grouped into `m` rows and the remaining
@@ -1211,6 +1230,8 @@ t:unbind(dim?)                    -- slices with one dimension removed
 t:swapaxes(dim1, dim2)            -- transpose two dimensions
 t:moveaxis(source, destination)   -- move one or more dimensions
 torch.atleast_1d(...) / torch.atleast_2d(...) / torch.atleast_3d(...)
+torch.hstack({...}) / torch.vstack({...}) / torch.dstack({...})
+torch.column_stack({...}) / torch.row_stack({...})
 torch.cat({t1, t2}, dim?)      -- default dim = 1
 torch.stack({t1, t2}, dim?)    -- default dim = 1
 torch.broadcast_shapes({2, 1}, {3})  -- {2, 3}
@@ -1237,6 +1258,12 @@ positive chunk size or a list of section sizes that must sum to the dimension;
 available as `torch.movedim`). `atleast_1d`, `atleast_2d`, and `atleast_3d`
 return each input at the requested minimum rank, leaving already-large inputs
 unchanged; they return multiple values.
+
+`hstack` concatenates 1-D inputs along their only axis and higher-rank inputs
+along the second dimension. `vstack` promotes each input to at least 2-D and
+concatenates rows; `dstack` promotes to at least 3-D and concatenates along the
+third dimension; `column_stack` stacks 1-D inputs as columns and otherwise
+concatenates along the second dimension; `row_stack` is an alias of `vstack`.
 
 ## Reductions
 
@@ -1536,7 +1563,11 @@ torch.split(t, size_or_sections, dim?) / torch.chunk(t, chunks, dim?)
 torch.unbind(t, dim?)
 torch.swapaxes(t, d1, d2) / torch.moveaxis(t, src, dst) / torch.movedim(...)
 torch.atleast_1d(...) / torch.atleast_2d(...) / torch.atleast_3d(...)
+torch.hstack({...}) / torch.vstack({...}) / torch.dstack({...})
+torch.column_stack({...}) / torch.row_stack({...})
 torch.take(t, index)             -- flattened 1-based gather
+torch.searchsorted(sorted, values, right?)  -- 1-based insertion positions
+torch.bucketize(input, boundaries, right?)   -- 1-based bucket indices
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
@@ -1550,6 +1581,7 @@ torch.logit(t, eps?) / torch.clamp_min(t, v) / torch.clamp_max(t, v)
 torch.softplus(t, beta?, threshold?) / torch.elu(t, alpha?)
 torch.selu(t) / torch.silu(t) / torch.gelu(t, approximate?)
 torch.ger(a, b)                  -- outer product of two vectors
+torch.kron(a, b) / torch.cartesian_prod(t1, t2, ...)
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)
 torch.trace(a) / torch.diag(a, diagonal?)
 torch.diag_embed(a, diagonal?) / torch.diagflat(a, diagonal?)

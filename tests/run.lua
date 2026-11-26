@@ -166,6 +166,7 @@ local files = {
   "test_utils_extra.lua",
   "test_sequence_extra.lua",
   "test_split_extra.lua",
+  "test_linalg_construction.lua",
   "test_random.lua",
   "test_autograd.lua",
   "test_nn.lua",

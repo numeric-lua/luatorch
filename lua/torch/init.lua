@@ -383,6 +383,138 @@ function torch.unbind(tensor, dim)
   return tensor:unbind(dim)
 end
 
+local function require_tensor_list(tensors, name)
+  if type(tensors) ~= "table" or #tensors == 0 then
+    error(name .. " expects a non-empty table of tensors", 2)
+  end
+  for i = 1, #tensors do
+    if not Tensor.is_tensor(tensors[i]) then
+      error(name .. " expects tensors; entry " .. i .. " is " ..
+        type(tensors[i]), 2)
+    end
+  end
+end
+
+function torch.hstack(tensors)
+  require_tensor_list(tensors, "hstack")
+  local all_1d = true
+  for i = 1, #tensors do
+    if tensors[i]:dim() ~= 1 then all_1d = false end
+  end
+  if all_1d then
+    return torch.cat(tensors, 1)
+  end
+  return torch.cat(tensors, 2)
+end
+
+function torch.vstack(tensors)
+  require_tensor_list(tensors, "vstack")
+  local parts = {}
+  for i = 1, #tensors do parts[i] = torch.atleast_2d(tensors[i]) end
+  return torch.cat(parts, 1)
+end
+
+function torch.dstack(tensors)
+  require_tensor_list(tensors, "dstack")
+  local parts = {}
+  for i = 1, #tensors do parts[i] = torch.atleast_3d(tensors[i]) end
+  return torch.cat(parts, 3)
+end
+
+function torch.column_stack(tensors)
+  require_tensor_list(tensors, "column_stack")
+  local all_1d = true
+  for i = 1, #tensors do
+    if tensors[i]:dim() ~= 1 then all_1d = false end
+  end
+  if all_1d then
+    return torch.stack(tensors, 2)
+  end
+  return torch.cat(tensors, 2)
+end
+
+torch.row_stack = torch.vstack
+
+function torch.cartesian_prod(...)
+  local tensors = { ... }
+  if #tensors == 0 then
+    error("cartesian_prod expects at least one tensor", 2)
+  end
+  local sizes, after = {}, {}
+  for i = 1, #tensors do
+    local tensor = tensors[i]
+    if not Tensor.is_tensor(tensor) or tensor:dim() ~= 1 then
+      error("cartesian_prod expects 1-D tensors", 2)
+    end
+    sizes[i] = tensor:size(1)
+  end
+  local running = 1
+  for i = #tensors, 1, -1 do
+    after[i] = running
+    running = running * sizes[i]
+  end
+  local before = 1
+  local columns = {}
+  for i = 1, #tensors do
+    local column = tensors[i]
+    if after[i] ~= 1 then
+      column = column:repeat_interleave(after[i])
+    end
+    if before ~= 1 then
+      column = column:tile({ before })
+    end
+    columns[i] = column
+    before = before * sizes[i]
+  end
+  return torch.stack(columns, 2)
+end
+
+local function searchsorted_values(sorted, values, right)
+  if not Tensor.is_tensor(sorted) or not Tensor.is_tensor(values) then
+    error("searchsorted expects two tensors", 2)
+  end
+  if sorted:dim() ~= 1 then
+    error("searchsorted sorted_sequence must be 1-D", 2)
+  end
+  if right ~= nil and type(right) ~= "boolean" then
+    error("searchsorted right must be a boolean", 2)
+  end
+  local sequence = sorted:totable()
+  local flat = values:reshape(-1):totable()
+  local result = {}
+  for i = 1, #flat do
+    local value = flat[i]
+    local low, high = 1, #sequence + 1
+    while low < high do
+      local middle = math.floor((low + high) / 2)
+      local move_right
+      if right then
+        move_right = sequence[middle] <= value
+      else
+        move_right = sequence[middle] < value
+      end
+      if move_right then
+        low = middle + 1
+      else
+        high = middle
+      end
+    end
+    result[i] = low
+  end
+  return Tensor.from_table(result, { dtype = 2 }):reshape(values:sizes())
+end
+
+function torch.searchsorted(sorted_sequence, values, right)
+  return searchsorted_values(sorted_sequence, values, right)
+end
+
+function torch.bucketize(input, boundaries, right)
+  if not Tensor.is_tensor(boundaries) or boundaries:dim() ~= 1 then
+    error("bucketize boundaries must be a 1-D tensor", 2)
+  end
+  return searchsorted_values(boundaries, input, right)
+end
+
 function torch.where(condition, a, b)
   if not (Tensor.is_tensor(condition) and Tensor.is_tensor(a) and Tensor.is_tensor(b)) then
     error("torch.where expects three tensors", 2)
@@ -1942,6 +2074,13 @@ end
 
 function torch.outer(a, b)
   return a:outer(b)
+end
+
+function torch.kron(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.kron expects a tensor as its first argument", 2)
+  end
+  return a:kron(b)
 end
 
 function torch.ger(a, b)

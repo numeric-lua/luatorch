@@ -100,6 +100,19 @@ All notable changes to luatorch are recorded here. The format follows
   axes (also exposed as `torch.movedim`);
 - `torch.atleast_1d`, `torch.atleast_2d`, and `torch.atleast_3d` return each
   input at the requested minimum rank, leaving already-large inputs unchanged;
+- `torch.kron` / `Tensor:kron(other)` computes the Kronecker product with
+  shapes aligned from the right, promoting missing leading dimensions to 1 and
+  producing product dimensions; it is differentiable through elementwise
+  multiplication;
+- `torch.cartesian_prod(t1, t2, ...)` enumerates the Cartesian product of 1-D
+  tensors as rows, with the first input varying slowest;
+- `torch.hstack`, `torch.vstack`, `torch.dstack`, `torch.column_stack`, and
+  `torch.row_stack` concatenate tensor lists with the usual rank promotion and
+  column/row/depth layouts (`row_stack` aliases `vstack`);
+- `torch.searchsorted(sorted_sequence, values, right?)` returns 1-based
+  insertion positions from a 1-D sorted sequence, and
+  `torch.bucketize(input, boundaries, right?)` applies the same search to any
+  input shape;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
@@ -122,15 +135,18 @@ All notable changes to luatorch are recorded here. The format follows
   tensor `repeat_interleave`, including empty and error cases;
 - `tests/test_split_extra.lua` covers fixed/section `split`, `chunk` part
   counts, `unbind` slices and gradients, `swapaxes`/`moveaxis` shapes and
-  gradients, and `atleast_1d`/`2d`/`3d` rank promotion.
+  gradients, and `atleast_1d`/`2d`/`3d` rank promotion;
+- `tests/test_linalg_construction.lua` covers `kron` values and gradients,
+  stacking layouts and gradients, `cartesian_prod` ordering and gradients,
+  `searchsorted` left/right positions, and `bucketize` shapes.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
   elementwise/math helpers, unary functions, activation helpers, tensor
-  utilities, and splitting/axis helpers. The unary functions add six shim
-  entry points; the activation, utility, sequence, and split helpers are pure
-  Lua composites.
+  utilities, splitting/axis helpers, and construction/search helpers. The
+  unary functions add six shim entry points; the activation, utility, sequence,
+  split, and construction helpers are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24
 

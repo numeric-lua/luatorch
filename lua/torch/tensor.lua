@@ -3023,6 +3023,42 @@ function Tensor:outer(vector)
   return wrap(lib.lt_outer(self.h, vector.h))
 end
 
+-- Kronecker product. Shapes are aligned from the right; missing leading
+-- dimensions count as 1 and each output dimension is the product of the two
+-- corresponding input dimensions.
+function Tensor:kron(other)
+  if not is_tensor(other) then
+    error("kron expects another tensor", 3)
+  end
+  local a_shape, b_shape = {}, {}
+  for i = 1, self:dim() do a_shape[i] = self:size(i) end
+  for i = 1, other:dim() do b_shape[i] = other:size(i) end
+  local rank = math.max(#a_shape, #b_shape)
+  if rank == 0 then
+    return self:mul(other)
+  end
+  local a, b = {}, {}
+  for i = 1, rank - #a_shape do a[i] = 1 end
+  for i = 1, #a_shape do a[#a + 1] = a_shape[i] end
+  for i = 1, rank - #b_shape do b[i] = 1 end
+  for i = 1, #b_shape do b[#b + 1] = b_shape[i] end
+
+  local out_shape, a_reshape, b_reshape = {}, {}, {}
+  local expanded = {}
+  for i = 1, rank do
+    out_shape[i] = a[i] * b[i]
+    a_reshape[#a_reshape + 1] = a[i]
+    a_reshape[#a_reshape + 1] = 1
+    b_reshape[#b_reshape + 1] = 1
+    b_reshape[#b_reshape + 1] = b[i]
+    expanded[#expanded + 1] = a[i]
+    expanded[#expanded + 1] = b[i]
+  end
+  local left = self:reshape(a_reshape):expand(unpack(expanded))
+  local right = other:reshape(b_reshape):expand(unpack(expanded))
+  return left:mul(right):reshape(out_shape)
+end
+
 function Tensor:addmm(mat1, mat2, beta, alpha)
   return wrap(lib.lt_addmm(self.h, mat1.h, mat2.h,
     beta == nil and 1 or beta, alpha == nil and 1 or alpha))
