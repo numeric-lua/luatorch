@@ -301,6 +301,10 @@ lt_tensor* lt_std(lt_tensor* a, int64_t dim, int keepdim, int unbiased);
 lt_tensor* lt_norm(lt_tensor* a, double p, int64_t dim, int keepdim);
 lt_tensor* lt_cumsum(lt_tensor* a, int64_t dim);
 lt_tensor* lt_cumprod(lt_tensor* a, int64_t dim);
+int lt_cummax(lt_tensor* a, int64_t dim, lt_tensor** values,
+              lt_tensor** indices);
+int lt_cummin(lt_tensor* a, int64_t dim, lt_tensor** values,
+              lt_tensor** indices);
 lt_tensor* lt_all(lt_tensor* a, int64_t dim, int keepdim);
 lt_tensor* lt_any(lt_tensor* a, int64_t dim, int keepdim);
 

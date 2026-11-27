@@ -1351,6 +1351,47 @@ function Tensor:hardswish()
   return self:mul(self:hardsigmoid())
 end
 
+-- Entropy term: -x log(x) for x > 0, 0 at zero, -inf below zero, NaN for NaN.
+function Tensor:entr()
+  activation_dtype(self, "entr")
+  local positive, zero = self:gt(0), self:eq(0)
+  local nan = self:isnan()
+  local product = self:mul(self:log()):neg()
+  local negative_infinity = full_like_value(self, -math.huge)
+  local zero_value = full_like_value(self, 0)
+  local result = wrap(lib.lt_where(positive.h, product.h,
+    negative_infinity.h))
+  result = wrap(lib.lt_where(zero.h, zero_value.h, result.h))
+  return wrap(lib.lt_where(nan.h, self.h, result.h))
+end
+
+local function xlog_check(self, other, name)
+  if not is_tensor(other) then
+    error(name .. " expects a tensor", 3)
+  end
+  activation_dtype(self, name)
+  activation_dtype(other, name)
+  if self:dtype_id() ~= other:dtype_id() then
+    error(name .. " expects both tensors to share a dtype", 3)
+  end
+end
+
+function Tensor:xlogy(other)
+  xlog_check(self, other, "xlogy")
+  local product = self:mul(other:log())
+  local zero_mask = self:eq(0)
+  return wrap(lib.lt_where(zero_mask.h, full_like_value(self, 0).h,
+    product.h))
+end
+
+function Tensor:xlog1py(other)
+  xlog_check(self, other, "xlog1py")
+  local product = self:mul(other:log1p())
+  local zero_mask = self:eq(0)
+  return wrap(lib.lt_where(zero_mask.h, full_like_value(self, 0).h,
+    product.h))
+end
+
 -- Inverse sigmoid: log(x / (1 - x)). With eps, the input is first clamped to
 -- [eps, 1 - eps] so exact 0/1 inputs produce finite values.
 function Tensor:logit(eps)
@@ -3836,6 +3877,22 @@ end
 
 function Tensor:cumprod(dim)
   return wrap(lib.lt_cumprod(self.h, self:_cdim(dim or 1)))
+end
+
+function Tensor:cummax(dim)
+  local values_pointer = ffi.new("lt_tensor*[1]")
+  local indices_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_cummax(self.h, self:_cdim(dim or 1),
+    values_pointer, indices_pointer))
+  return wrap(values_pointer[0]), wrap(indices_pointer[0]):add(1)
+end
+
+function Tensor:cummin(dim)
+  local values_pointer = ffi.new("lt_tensor*[1]")
+  local indices_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_cummin(self.h, self:_cdim(dim or 1),
+    values_pointer, indices_pointer))
+  return wrap(values_pointer[0]), wrap(indices_pointer[0]):add(1)
 end
 
 -- Cumulative log-sum-exp along one dimension, built from stable logaddexp

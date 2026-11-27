@@ -73,6 +73,14 @@ All notable changes to luatorch are recorded here. The format follows
   Bessel function of order zero, `lgamma` the log-gamma function, `digamma`
   the psi function, and `ndtr` the standard normal CDF, with `torch.*`
   aliases and in-place variants;
+- `torch.cummax` / `Tensor:cummax(dim?)` and `torch.cummin` /
+  `Tensor:cummin(dim?)` return running extrema and 1-based indices along a
+  dimension (default 1), with differentiable values;
+- `torch.entr` / `Tensor:entr()` computes `-x log(x)` with `0` at zero,
+  `-inf` for negatives, and NaN propagation;
+- `torch.xlogy` / `Tensor:xlogy(other)` computes `x log(y)` and
+  `torch.xlog1py` / `Tensor:xlog1py(other)` computes `x log1p(y)`, returning
+  zero when `x == 0` for same-dtype floating tensors;
 - `torch.broadcast_shapes(...)` returns the broadcast result of shape tables
   (varargs, a single table of shapes, or no arguments), and
   `torch.broadcast_tensors(...)` expands every input to that shape and returns
@@ -183,20 +191,23 @@ All notable changes to luatorch are recorded here. The format follows
   behavior, and validation errors;
 - `tests/test_special_extra.lua` covers `erfinv` inversion, `i0`/`lgamma`/
   `digamma` known values, `ndtr` symmetry, differentiability, and alias
-  validation.
+  validation;
+- `tests/test_special2.lua` covers `cummax`/`cummin` values, indices and
+  gradients, `entr` boundaries and gradients, and `xlogy`/`xlog1py` values,
+  gradients, and validation.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
   elementwise/math helpers, unary functions, activation helpers, tensor
   utilities, splitting/axis helpers, construction/search helpers, and
-  NaN/extrema/sorting helpers. Earlier batches add six unary and five binary
-  shim entry points (`log2`, `log10`, `expm1`, `erf`, `erfc`, `sinc`; `fmod`,
-  `atan2`, `copysign`, `floor_divide`, `heaviside`); this cycle adds five
-  special unary entry points (`erfinv`, `i0`, `lgamma`, `digamma`, `ndtr`)
-  plus their header and FFI declarations. The activation, angle, utility,
-  sequence, split, construction, and reduction helpers are pure Lua
-  composites.
+  NaN/extrema/sorting helpers. Earlier batches add six unary, five binary, and
+  five special unary shim entry points (`log2`, `log10`, `expm1`, `erf`,
+  `erfc`, `sinc`; `fmod`, `atan2`, `copysign`, `floor_divide`, `heaviside`;
+  `erfinv`, `i0`, `lgamma`, `digamma`, `ndtr`); this cycle adds two reduction
+  shims (`cummax`, `cummin`) plus their header and FFI declarations. The
+  activation, angle, utility, sequence, split, construction, and elementwise
+  special helpers are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24
 

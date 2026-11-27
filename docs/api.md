@@ -357,6 +357,9 @@ t:logaddexp(other)          -- log(exp(self) + exp(other))
 t:logaddexp2(other)         -- log2(2^self + 2^other)
 t:hypot(other)              -- sqrt(self^2 + other^2)
 t:frac()                    -- self - trunc(self)
+t:entr()                    -- -x log(x), 0 at 0, -inf below 0
+t:xlogy(other)              -- x log(y), 0 when x == 0
+t:xlog1py(other)            -- x log1p(y), 0 when x == 0
 t:softplus(beta?, threshold?)  -- log(1 + exp(beta*x)) / beta
 t:elu(alpha?)               -- x if x > 0, alpha*(exp(x)-1) otherwise
 t:selu()                    -- scaled elu
@@ -389,6 +392,12 @@ fractional part for floating dtypes and zero for integer dtypes, with
 autograd flowing through the subtraction. `torch.logaddexp`,
 `torch.logaddexp2`, `torch.hypot`, and `torch.frac` are the module-level
 forms.
+
+`entr` is the entropy term `-x log(x)`: it returns `0` at zero, `-inf` for
+negative inputs, and NaN for NaN. `xlogy` computes `x log(y)` and `xlog1py`
+computes `x log1p(y)`, both returning zero whenever `x == 0`; inputs must share
+one floating dtype and broadcasting follows the ordinary rules. Module-level
+forms are `torch.entr`, `torch.xlogy`, and `torch.xlog1py`.
 
 The activation helpers accept float16/float32/float64 tensors and are
 differentiable. `softplus(beta?, threshold?)` defaults to `beta = 1` and
@@ -1330,6 +1339,8 @@ t:norm(p?, dim?, keepdim?)     -- p defaults to 2; math.huge supported
 t:logsumexp(dim?, keepdim?)
 t:cumsum(dim?)                 -- dim defaults to 1
 t:cumprod(dim?)
+t:cummax(dim?)                 -- running maxima and 1-based indices
+t:cummin(dim?)                 -- running minima and 1-based indices
 t:logcumsumexp(dim?)           -- cumulative log-sum-exp
 t:trapezoid(x?, opts?)         -- integrate along a dimension
 t:all(dim?, keepdim?)
@@ -1404,6 +1415,10 @@ print(t:nanstd():item())                 -- 1.4142
 dimension (the last by default) using stable `logaddexp` steps, so large
 exponents do not overflow. It is differentiable and empty dimensions return an
 empty result.
+
+`cummax(dim?)` and `cummin(dim?)` return the running maximum or minimum values
+and 1-based indices along the selected dimension (default 1); the value path
+carries autograd. `torch.cummax`/`torch.cummin` are the module-level forms.
 
 `trapezoid` applies the trapezoidal rule along one dimension and removes that
 dimension from the result. `x` supplies the sample positions either as a 1-D
@@ -1624,6 +1639,8 @@ torch.atan2(a, b) / torch.copysign(a, b)
 torch.heaviside(input, values)
 torch.kthvalue(t, k, dim?, keepdim?) / torch.unique_consecutive(t, ...)
 torch.logcumsumexp(t, dim?)       -- cumulative log-sum-exp
+torch.cummax(t, dim?) / torch.cummin(t, dim?)
+torch.entr(t) / torch.xlogy(a, b) / torch.xlog1py(a, b)
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)
 torch.nansum(t, dim?, keepdim?) / torch.nanmean(t, dim?, keepdim?)
 torch.nanvar(t, dim?, unbiased?, keepdim?) / torch.nanstd(...)

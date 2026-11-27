@@ -1333,6 +1333,41 @@ function torch.logcumsumexp(tensor, dim)
   return tensor:logcumsumexp(dim)
 end
 
+function torch.cummax(tensor, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.cummax expects a tensor", 2)
+  end
+  return tensor:cummax(dim)
+end
+
+function torch.cummin(tensor, dim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.cummin expects a tensor", 2)
+  end
+  return tensor:cummin(dim)
+end
+
+function torch.entr(tensor)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.entr expects a tensor", 2)
+  end
+  return tensor:entr()
+end
+
+function torch.xlogy(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.xlogy expects a tensor as its first argument", 2)
+  end
+  return a:xlogy(b)
+end
+
+function torch.xlog1py(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.xlog1py expects a tensor as its first argument", 2)
+  end
+  return a:xlog1py(b)
+end
+
 function torch.multinomial(tensor, num_samples, replacement)
   return tensor:multinomial(num_samples, replacement)
 end

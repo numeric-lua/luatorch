@@ -3251,6 +3251,38 @@ lt_tensor* lt_cumprod(lt_tensor* a, int64_t dim) {
   LT_CATCH_NULL
 }
 
+int lt_cummax(lt_tensor* a, int64_t dim, lt_tensor** values,
+              lt_tensor** indices) {
+  try {
+    clear_error();
+    if (values == nullptr || indices == nullptr) {
+      throw std::runtime_error("cummax: null output pointer");
+    }
+    int64_t d = resolve_dim(dim, a->t.dim(), "cummax");
+    auto result = a->t.cummax(d);
+    *values = wrap(std::get<0>(result));
+    *indices = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
+int lt_cummin(lt_tensor* a, int64_t dim, lt_tensor** values,
+              lt_tensor** indices) {
+  try {
+    clear_error();
+    if (values == nullptr || indices == nullptr) {
+      throw std::runtime_error("cummin: null output pointer");
+    }
+    int64_t d = resolve_dim(dim, a->t.dim(), "cummin");
+    auto result = a->t.cummin(d);
+    *values = wrap(std::get<0>(result));
+    *indices = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
 lt_tensor* lt_all(lt_tensor* a, int64_t dim, int keepdim) {
   try {
     clear_error();
