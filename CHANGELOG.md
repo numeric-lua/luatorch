@@ -69,6 +69,10 @@ All notable changes to luatorch are recorded here. The format follows
 - `torch.hardsigmoid` / `Tensor:hardsigmoid()` computes
   `clamp(x + 3, 0, 6) / 6`, and `torch.hardswish` / `Tensor:hardswish()`
   computes `x * hardsigmoid(x)`;
+- `erfinv` (`erfinv_`) exposes the inverse error function, `i0` the modified
+  Bessel function of order zero, `lgamma` the log-gamma function, `digamma`
+  the psi function, and `ndtr` the standard normal CDF, with `torch.*`
+  aliases and in-place variants;
 - `torch.broadcast_shapes(...)` returns the broadcast result of shape tables
   (varargs, a single table of shapes, or no arguments), and
   `torch.broadcast_tensors(...)` expands every input to that shape and returns
@@ -176,7 +180,10 @@ All notable changes to luatorch are recorded here. The format follows
   `heaviside`, float16 behavior, and validation errors;
 - `tests/test_activation2.lua` covers angle conversions and gradients,
   `softsign`, `hardsigmoid`/`hardswish` values and gradients, float16
-  behavior, and validation errors.
+  behavior, and validation errors;
+- `tests/test_special_extra.lua` covers `erfinv` inversion, `i0`/`lgamma`/
+  `digamma` known values, `ndtr` symmetry, differentiability, and alias
+  validation.
 
 ### Changed
 
@@ -185,9 +192,11 @@ All notable changes to luatorch are recorded here. The format follows
   utilities, splitting/axis helpers, construction/search helpers, and
   NaN/extrema/sorting helpers. Earlier batches add six unary and five binary
   shim entry points (`log2`, `log10`, `expm1`, `erf`, `erfc`, `sinc`; `fmod`,
-  `atan2`, `copysign`, `floor_divide`, `heaviside`) plus their header and FFI
-  declarations. The activation, angle, utility, sequence, split, construction,
-  and reduction helpers are pure Lua composites.
+  `atan2`, `copysign`, `floor_divide`, `heaviside`); this cycle adds five
+  special unary entry points (`erfinv`, `i0`, `lgamma`, `digamma`, `ndtr`)
+  plus their header and FFI declarations. The activation, angle, utility,
+  sequence, split, construction, and reduction helpers are pure Lua
+  composites.
 
 ## [0.34.0] — 2026-11-24
 

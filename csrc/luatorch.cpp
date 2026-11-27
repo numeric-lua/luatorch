@@ -9,6 +9,7 @@
 #include "luatorch.h"
 
 #include <ATen/ATen.h>
+#include <ATen/ops/special_ndtr.h>
 #include <ATen/Parallel.h>
 #include <c10/util/Logging.h>
 #include <torch/csrc/autograd/custom_function.h>
@@ -1957,6 +1958,10 @@ LT_UNARY(log2, log2)
 LT_UNARY(log10, log10)
 LT_UNARY(erf, erf)
 LT_UNARY(erfc, erfc)
+LT_UNARY(erfinv, erfinv)
+LT_UNARY(i0, i0)
+LT_UNARY(lgamma, lgamma)
+LT_UNARY(digamma, digamma)
 LT_UNARY(sinc, sinc)
 LT_UNARY(sqrt, sqrt)
 LT_UNARY(rsqrt, rsqrt)
@@ -1980,6 +1985,19 @@ LT_UNARY(square, square)
 LT_UNARY(reciprocal, reciprocal)
 
 #undef LT_UNARY
+
+lt_tensor* lt_ndtr(lt_tensor* a, int inplace) {
+  try {
+    clear_error();
+    auto result = at::special_ndtr(a->t);
+    if (inplace) {
+      a->t.copy_(result);
+      return a;
+    }
+    return wrap(result);
+  }
+  LT_CATCH_NULL
+}
 
 lt_tensor* lt_clamp(lt_tensor* a, double lo, double hi, int inplace) {
   try {
