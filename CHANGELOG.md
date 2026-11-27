@@ -124,6 +124,17 @@ All notable changes to luatorch are recorded here. The format follows
   1-based inverse indices and run counts;
 - `torch.logcumsumexp` / `Tensor:logcumsumexp(dim?)` accumulates a stable
   log-sum-exp along the selected dimension (last by default);
+- `torch.fmod` / `Tensor:fmod(other)` follows C `fmod` (sign of the dividend)
+  and differs from `remainder` for mixed signs;
+- `torch.floor_divide` / `Tensor:floor_divide(other)` rounds the quotient
+  toward negative infinity for floating and integer dtypes;
+- `torch.atan2` / `Tensor:atan2(other)` returns the four-quadrant angle of
+  `y/x` with broadcasting;
+- `torch.copysign` / `Tensor:copysign(other)` copies the first operand's
+  magnitude and the second operand's sign, including signed zero;
+- `torch.heaviside` / `Tensor:heaviside(values)` returns 0 below zero, 1 above
+  zero, and the supplied number or same-dtype tensor at zero, with in-place
+  variants for all five operations;
 - `tests/test_elementwise_extra.lua` covers signed infinities, NaN-aware
   reductions and their gradients, `addcmul`/`addcdiv` broadcasting and
   gradients, `lerp` with scalar/tensor weights, and validation errors;
@@ -153,7 +164,10 @@ All notable changes to luatorch are recorded here. The format follows
 - `tests/test_reduce_extra.lua` covers `fmax`/`fmin` NaN behavior and
   gradients, `kthvalue` values/indices and errors, `unique_consecutive`
   inverse/counts and empty/bool inputs, and `logcumsumexp` values and
-  gradients.
+  gradients;
+- `tests/test_binary_extra.lua` covers `fmod` vs `remainder`, negative
+  `floor_divide`, all `atan2` quadrants, `copysign` signed zero, scalar/tensor
+  `heaviside`, float16 behavior, and validation errors.
 
 ### Changed
 
@@ -161,7 +175,9 @@ All notable changes to luatorch are recorded here. The format follows
   elementwise/math helpers, unary functions, activation helpers, tensor
   utilities, splitting/axis helpers, construction/search helpers, and
   NaN/extrema/sorting helpers. The unary functions add six shim entry points;
-  the activation, utility, sequence, split, construction, and reduction helpers
+  this cycle adds five binary shim entry points (`fmod`, `atan2`, `copysign`,
+  `floor_divide`, `heaviside`) plus their header and FFI declarations. The
+  activation, utility, sequence, split, construction, and reduction helpers
   are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24

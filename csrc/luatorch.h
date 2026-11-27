@@ -114,6 +114,11 @@ lt_tensor* lt_mul(lt_tensor* a, lt_tensor* b, int inplace);
 lt_tensor* lt_div(lt_tensor* a, lt_tensor* b, int inplace);
 lt_tensor* lt_pow(lt_tensor* a, lt_tensor* b, int inplace);
 lt_tensor* lt_remainder(lt_tensor* a, lt_tensor* b, int inplace);
+lt_tensor* lt_fmod(lt_tensor* a, lt_tensor* b, int inplace);
+lt_tensor* lt_atan2(lt_tensor* a, lt_tensor* b, int inplace);
+lt_tensor* lt_copysign(lt_tensor* a, lt_tensor* b, int inplace);
+lt_tensor* lt_floor_divide(lt_tensor* a, lt_tensor* b, int inplace);
+lt_tensor* lt_heaviside(lt_tensor* a, lt_tensor* b, int inplace);
 lt_tensor* lt_maximum(lt_tensor* a, lt_tensor* b, int inplace);
 lt_tensor* lt_minimum(lt_tensor* a, lt_tensor* b, int inplace);
 

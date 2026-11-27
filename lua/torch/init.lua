@@ -657,6 +657,36 @@ torch.sub = function(a, b) return a:sub(b) end
 torch.mul = function(a, b) return a:mul(b) end
 torch.div = function(a, b) return a:div(b) end
 torch.pow = function(a, b) return a:pow(b) end
+function torch.fmod(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.fmod expects a tensor as its first argument", 2)
+  end
+  return a:fmod(b)
+end
+function torch.atan2(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.atan2 expects a tensor as its first argument", 2)
+  end
+  return a:atan2(b)
+end
+function torch.copysign(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.copysign expects a tensor as its first argument", 2)
+  end
+  return a:copysign(b)
+end
+function torch.floor_divide(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.floor_divide expects a tensor as its first argument", 2)
+  end
+  return a:floor_divide(b)
+end
+function torch.heaviside(input, values)
+  if not Tensor.is_tensor(input) then
+    error("torch.heaviside expects a tensor as its first argument", 2)
+  end
+  return input:heaviside(values)
+end
 function torch.addcmul(input, first, second, value)
   if not Tensor.is_tensor(input) then
     error("torch.addcmul expects a tensor as its first argument", 2)

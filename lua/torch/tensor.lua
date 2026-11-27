@@ -1062,6 +1062,42 @@ binary_method("remainder", lib.lt_remainder, lib.lt_remainder_scalar, false)
 binary_method("remainder", lib.lt_remainder, lib.lt_remainder_scalar, true)
 binary_method("maximum", lib.lt_maximum, nil, false)
 binary_method("minimum", lib.lt_minimum, nil, false)
+binary_method("fmod", lib.lt_fmod, nil, false)
+binary_method("fmod", lib.lt_fmod, nil, true)
+binary_method("atan2", lib.lt_atan2, nil, false)
+binary_method("atan2", lib.lt_atan2, nil, true)
+binary_method("copysign", lib.lt_copysign, nil, false)
+binary_method("copysign", lib.lt_copysign, nil, true)
+binary_method("floor_divide", lib.lt_floor_divide, nil, false)
+binary_method("floor_divide", lib.lt_floor_divide, nil, true)
+
+-- Heaviside step: 0 for negative inputs, 1 for positive inputs, and `values`
+-- at zero (a number or a broadcastable tensor of the same dtype).
+local function heaviside_values(self, values, name)
+  if type(values) == "number" then
+    values = full_like_value(self, values)
+  elseif not is_tensor(values) then
+    error(name .. " values must be a number or a tensor", 3)
+  end
+  if values:dtype_id() ~= self:dtype_id() then
+    error(name .. " expects values to match the input dtype", 3)
+  end
+  return values
+end
+
+function Tensor:heaviside(values)
+  values = heaviside_values(self, values, "heaviside")
+  return wrap(lib.lt_heaviside(self.h, values.h, 0))
+end
+
+function Tensor:heaviside_(values)
+  values = heaviside_values(self, values, "heaviside")
+  local pointer = lib.lt_heaviside(self.h, values.h, 1)
+  if pointer == nil then
+    error(last_error(), 3)
+  end
+  return self
+end
 
 local function nan_extreme(self, other, name, is_maximum)
   if not is_tensor(other) then

@@ -303,12 +303,24 @@ t:add(x)  t:sub(x)  t:mul(x)  t:div(x)  t:pow(x)  t:remainder(x)
 t:add_(x) ...                       -- in-place
 t:maximum(other)  t:minimum(other)  -- tensors only
 t:fmax(other)     t:fmin(other)     -- tensors only, ignore NaNs
+t:fmod(other)     t:floor_divide(other)
+t:atan2(other)    t:copysign(other)
+t:heaviside(values)                 -- 0 below zero, 1 above, values at 0
 ```
 
 `fmax`/`fmin` return the other operand when either side is NaN, return NaN
 when both are, and otherwise behave like `maximum`/`minimum`; they broadcast
 and require matching non-bool dtypes. `torch.fmax`/`torch.fmin` are the
 module-level forms.
+
+`fmod` follows C `fmod` (the result takes the dividend's sign) and differs
+from `remainder` for mixed signs. `floor_divide` rounds the quotient toward
+negative infinity. `atan2` returns the four-quadrant angle of `y/x`,
+`copysign` copies the magnitude from the first operand and the sign from the
+second (including signed zero), and `heaviside` returns `0` below zero, `1`
+above zero, and the supplied number or same-dtype tensor at zero. Each has an
+`_` in-place variant and a `torch.*` module form; autograd availability follows
+the underlying ATen operation (for example, `heaviside` has no derivative).
 
 Operators: `+ - * / ^` and unary `-`, including scalar-left forms
 (`2 - t`, `1 / t`, `2 ^ t`). `cmul`/`cdiv` are Torch7 aliases for
@@ -1591,6 +1603,9 @@ torch.bucketize(input, boundaries, right?)   -- 1-based bucket indices
 torch.aminmax(t, dim?, keepdim?) -- min and max values in one call
 torch.amin(t, dim?, keepdim?) / torch.amax(t, dim?, keepdim?)
 torch.fmax(a, b) / torch.fmin(a, b)  -- NaN-ignoring extrema
+torch.fmod(a, b) / torch.floor_divide(a, b)
+torch.atan2(a, b) / torch.copysign(a, b)
+torch.heaviside(input, values)
 torch.kthvalue(t, k, dim?, keepdim?) / torch.unique_consecutive(t, ...)
 torch.logcumsumexp(t, dim?)       -- cumulative log-sum-exp
 torch.count_nonzero(t, dim?)     -- non-zero count (int64; dim int or table)

@@ -1792,6 +1792,27 @@ lt_tensor* lt_remainder(lt_tensor* a, lt_tensor* b, int inplace) {
   LT_CATCH_NULL
 }
 
+#define LT_BINOP_COPY(name, method)                             \
+  lt_tensor* lt_##name(lt_tensor* a, lt_tensor* b, int inplace) { \
+    try {                                                       \
+      clear_error();                                            \
+      if (inplace) {                                            \
+        a->t.copy_(a->t.method(b->t));                          \
+        return a;                                               \
+      }                                                         \
+      return wrap(a->t.method(b->t));                           \
+    }                                                           \
+    LT_CATCH_NULL                                               \
+  }
+
+LT_BINOP_COPY(fmod, fmod)
+LT_BINOP_COPY(atan2, atan2)
+LT_BINOP_COPY(copysign, copysign)
+LT_BINOP_COPY(floor_divide, floor_divide)
+LT_BINOP_COPY(heaviside, heaviside)
+
+#undef LT_BINOP_COPY
+
 lt_tensor* lt_maximum(lt_tensor* a, lt_tensor* b, int inplace) {
   try {
     clear_error();
