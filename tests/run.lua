@@ -169,6 +169,7 @@ local files = {
   "test_linalg_construction.lua",
   "test_reduce_extra.lua",
   "test_binary_extra.lua",
+  "test_activation2.lua",
   "test_random.lua",
   "test_autograd.lua",
   "test_nn.lua",

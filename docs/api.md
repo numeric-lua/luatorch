@@ -359,6 +359,11 @@ t:elu(alpha?)               -- x if x > 0, alpha*(exp(x)-1) otherwise
 t:selu()                    -- scaled elu
 t:silu()                    -- x * sigmoid(x)
 t:gelu(approximate?)        -- "none" (erf) or "tanh" approximation
+t:deg2rad()                 -- multiply by pi/180
+t:rad2deg()                 -- multiply by 180/pi
+t:softsign()                -- x / (1 + |x|)
+t:hardsigmoid()             -- clamp(x + 3, 0, 6) / 6
+t:hardswish()               -- x * hardsigmoid(x)
 t:clamp_min(value)          -- max(self, value), floating dtypes
 t:clamp_max(value)          -- min(self, value), floating dtypes
 t:logit(eps?)               -- inverse sigmoid; eps clamps to [eps, 1-eps]
@@ -390,6 +395,13 @@ the threshold. `elu(alpha?)` defaults `alpha = 1`, `selu()` applies the fixed
 exact `erf` form by default and the standard tanh approximation with
 `gelu("tanh")`. Module-level forms are `torch.softplus`, `torch.elu`,
 `torch.selu`, `torch.silu`, and `torch.gelu`.
+
+`deg2rad` and `rad2deg` convert angles by `pi/180` and `180/pi`. `softsign`
+maps `x` to `x / (1 + |x|)`, `hardsigmoid` is
+`clamp(x + 3, 0, 6) / 6`, and `hardswish` is `x * hardsigmoid(x)`. They are
+differentiable and accept float16/float32/float64; module-level forms are
+`torch.deg2rad`, `torch.rad2deg`, `torch.softsign`, `torch.hardsigmoid`, and
+`torch.hardswish`.
 
 `clamp_min` and `clamp_max` are one-sided clamps with `_` in-place variants;
 they accept float16/float32/float64 inputs and preserve NaN entries.
@@ -1574,9 +1586,10 @@ model:load_safetensors("model.safetensors", { strip_prefix = "model." })
 `torch.add`, `sub`, `mul`, `div`, `pow`, `matmul`, `mm`, `bmm`, `dot`, `sum`,
 `mean`, `prod`, `max`, `min`, `argmax`, `argmin`, `transpose`, `reshape`,
 `clamp`, `clamp_min`, `clamp_max`, `logit`, `relu`, `sigmoid`, `tanh`,
-`softplus`, `elu`, `selu`, `silu`, `gelu`, `exp`, `expm1`, `log`, `log2`,
-`log10`, `erf`, `erfc`, `sinc`, `sqrt`, `abs` are thin wrappers around the
-corresponding tensor methods.
+`softplus`, `elu`, `selu`, `silu`, `gelu`, `deg2rad`, `rad2deg`, `softsign`,
+`hardsigmoid`, `hardswish`, `exp`, `expm1`, `log`, `log2`, `log10`, `erf`,
+`erfc`, `sinc`, `sqrt`, `abs` are thin wrappers around the corresponding
+tensor methods.
 
 Other module helpers:
 
@@ -1618,6 +1631,8 @@ torch.frac(t)
 torch.logit(t, eps?) / torch.clamp_min(t, v) / torch.clamp_max(t, v)
 torch.softplus(t, beta?, threshold?) / torch.elu(t, alpha?)
 torch.selu(t) / torch.silu(t) / torch.gelu(t, approximate?)
+torch.deg2rad(t) / torch.rad2deg(t) / torch.softsign(t)
+torch.hardsigmoid(t) / torch.hardswish(t)
 torch.ger(a, b)                  -- outer product of two vectors
 torch.kron(a, b) / torch.cartesian_prod(t1, t2, ...)
 torch.tril(a, diagonal?) / torch.triu(a, diagonal?)

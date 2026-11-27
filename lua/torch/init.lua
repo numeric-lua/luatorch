@@ -857,6 +857,36 @@ function torch.gelu(input, approximate)
   end
   return input:gelu(approximate)
 end
+function torch.deg2rad(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.deg2rad expects a tensor", 2)
+  end
+  return input:deg2rad()
+end
+function torch.rad2deg(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.rad2deg expects a tensor", 2)
+  end
+  return input:rad2deg()
+end
+function torch.softsign(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.softsign expects a tensor", 2)
+  end
+  return input:softsign()
+end
+function torch.hardsigmoid(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.hardsigmoid expects a tensor", 2)
+  end
+  return input:hardsigmoid()
+end
+function torch.hardswish(input)
+  if not Tensor.is_tensor(input) then
+    error("torch.hardswish expects a tensor", 2)
+  end
+  return input:hardswish()
+end
 torch.exp = function(t) return t:exp() end
 torch.expm1 = function(t) return t:expm1() end
 torch.log = function(t) return t:log() end

@@ -1326,6 +1326,31 @@ function Tensor:gelu(approximate)
   return self:mul(scaled:erf():add(1)):mul(0.5)
 end
 
+function Tensor:deg2rad()
+  activation_dtype(self, "deg2rad")
+  return self:mul(math.pi / 180)
+end
+
+function Tensor:rad2deg()
+  activation_dtype(self, "rad2deg")
+  return self:mul(180 / math.pi)
+end
+
+function Tensor:softsign()
+  activation_dtype(self, "softsign")
+  return self:div(self:abs():add(1))
+end
+
+function Tensor:hardsigmoid()
+  activation_dtype(self, "hardsigmoid")
+  return self:add(3):clamp(0, 6):div(6)
+end
+
+function Tensor:hardswish()
+  activation_dtype(self, "hardswish")
+  return self:mul(self:hardsigmoid())
+end
+
 -- Inverse sigmoid: log(x / (1 - x)). With eps, the input is first clamped to
 -- [eps, 1 - eps] so exact 0/1 inputs produce finite values.
 function Tensor:logit(eps)

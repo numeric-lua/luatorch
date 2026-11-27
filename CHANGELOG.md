@@ -63,6 +63,12 @@ All notable changes to luatorch are recorded here. The format follows
 - `torch.silu` / `Tensor:silu()` computes `x * sigmoid(x)`;
 - `torch.gelu` / `Tensor:gelu(approximate?)` computes the exact `erf` form by
   default and the standard tanh approximation with `approximate = "tanh"`;
+- `torch.deg2rad` / `Tensor:deg2rad()` and `torch.rad2deg` /
+  `Tensor:rad2deg()` convert angles by `pi/180` and `180/pi`;
+- `torch.softsign` / `Tensor:softsign()` computes `x / (1 + |x|)`;
+- `torch.hardsigmoid` / `Tensor:hardsigmoid()` computes
+  `clamp(x + 3, 0, 6) / 6`, and `torch.hardswish` / `Tensor:hardswish()`
+  computes `x * hardsigmoid(x)`;
 - `torch.broadcast_shapes(...)` returns the broadcast result of shape tables
   (varargs, a single table of shapes, or no arguments), and
   `torch.broadcast_tensors(...)` expands every input to that shape and returns
@@ -167,18 +173,21 @@ All notable changes to luatorch are recorded here. The format follows
   gradients;
 - `tests/test_binary_extra.lua` covers `fmod` vs `remainder`, negative
   `floor_divide`, all `atan2` quadrants, `copysign` signed zero, scalar/tensor
-  `heaviside`, float16 behavior, and validation errors.
+  `heaviside`, float16 behavior, and validation errors;
+- `tests/test_activation2.lua` covers angle conversions and gradients,
+  `softsign`, `hardsigmoid`/`hardswish` values and gradients, float16
+  behavior, and validation errors.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
   elementwise/math helpers, unary functions, activation helpers, tensor
   utilities, splitting/axis helpers, construction/search helpers, and
-  NaN/extrema/sorting helpers. The unary functions add six shim entry points;
-  this cycle adds five binary shim entry points (`fmod`, `atan2`, `copysign`,
-  `floor_divide`, `heaviside`) plus their header and FFI declarations. The
-  activation, utility, sequence, split, construction, and reduction helpers
-  are pure Lua composites.
+  NaN/extrema/sorting helpers. Earlier batches add six unary and five binary
+  shim entry points (`log2`, `log10`, `expm1`, `erf`, `erfc`, `sinc`; `fmod`,
+  `atan2`, `copysign`, `floor_divide`, `heaviside`) plus their header and FFI
+  declarations. The activation, angle, utility, sequence, split, construction,
+  and reduction helpers are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24
 
