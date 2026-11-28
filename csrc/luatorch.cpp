@@ -9,6 +9,7 @@
 #include "luatorch.h"
 
 #include <ATen/ATen.h>
+#include <ATen/ops/special_bessel_j0.h>
 #include <ATen/ops/special_i0e.h>
 #include <ATen/ops/special_i1.h>
 #include <ATen/ops/special_i1e.h>
@@ -2024,6 +2025,57 @@ LT_SPECIAL_UNARY(ndtri, at::special_ndtri)
 LT_SPECIAL_UNARY(i0e, at::special_i0e)
 LT_SPECIAL_UNARY(i1, at::special_i1)
 LT_SPECIAL_UNARY(i1e, at::special_i1e)
+LT_SPECIAL_UNARY(bessel_j0, at::special_bessel_j0)
+
+lt_tensor* lt_polygamma(lt_tensor* a, int64_t order, int inplace) {
+  try {
+    clear_error();
+    auto result = a->t.polygamma(order);
+    if (inplace) {
+      a->t.copy_(result);
+      return a;
+    }
+    return wrap(result);
+  }
+  LT_CATCH_NULL
+}
+
+lt_tensor* lt_mvlgamma(lt_tensor* a, int64_t order, int inplace) {
+  try {
+    clear_error();
+    auto result = a->t.mvlgamma(order);
+    if (inplace) {
+      a->t.copy_(result);
+      return a;
+    }
+    return wrap(result);
+  }
+  LT_CATCH_NULL
+}
+
+lt_tensor* lt_igamma(lt_tensor* a, lt_tensor* b, int inplace) {
+  try {
+    clear_error();
+    if (inplace) {
+      a->t.copy_(a->t.igamma(b->t));
+      return a;
+    }
+    return wrap(a->t.igamma(b->t));
+  }
+  LT_CATCH_NULL
+}
+
+lt_tensor* lt_igammac(lt_tensor* a, lt_tensor* b, int inplace) {
+  try {
+    clear_error();
+    if (inplace) {
+      a->t.copy_(a->t.igammac(b->t));
+      return a;
+    }
+    return wrap(a->t.igammac(b->t));
+  }
+  LT_CATCH_NULL
+}
 
 #undef LT_SPECIAL_UNARY
 

@@ -899,6 +899,31 @@ torch.i0 = function(t) return t:i0() end
 torch.i0e = function(t) return t:i0e() end
 torch.i1 = function(t) return t:i1() end
 torch.i1e = function(t) return t:i1e() end
+torch.bessel_j0 = function(t) return t:bessel_j0() end
+function torch.polygamma(order, input)
+  if not Tensor.is_tensor(input) then
+    error("torch.polygamma expects a tensor as its second argument", 2)
+  end
+  return input:polygamma(order)
+end
+function torch.mvlgamma(input, order)
+  if not Tensor.is_tensor(input) then
+    error("torch.mvlgamma expects a tensor as its first argument", 2)
+  end
+  return input:mvlgamma(order)
+end
+function torch.igamma(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.igamma expects a tensor as its first argument", 2)
+  end
+  return a:igamma(b)
+end
+function torch.igammac(a, b)
+  if not Tensor.is_tensor(a) then
+    error("torch.igammac expects a tensor as its first argument", 2)
+  end
+  return a:igammac(b)
+end
 torch.lgamma = function(t) return t:lgamma() end
 torch.digamma = function(t) return t:digamma() end
 torch.ndtr = function(t) return t:ndtr() end
@@ -2506,9 +2531,14 @@ torch.special = {
   i0e = torch.i0e,
   i1 = torch.i1,
   i1e = torch.i1e,
+  bessel_j0 = torch.bessel_j0,
   lgamma = torch.lgamma,
   digamma = torch.digamma,
   psi = torch.digamma,
+  polygamma = torch.polygamma,
+  mvlgamma = torch.mvlgamma,
+  igamma = torch.igamma,
+  igammac = torch.igammac,
   ndtr = torch.ndtr,
   log_ndtr = torch.log_ndtr,
   ndtri = torch.ndtri,

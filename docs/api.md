@@ -343,22 +343,24 @@ Comparisons return Boolean tensors: `eq`, `ne`, `lt`, `le`, `gt`, `ge`
 Unary methods (each has an `_` in-place version):
 
 `neg abs exp expm1 log log1p log2 log10 erf erfc erfinv i0 i0e i1 i1e lgamma
-digamma ndtr log_ndtr ndtri sinc sqrt rsqrt sin cos tan asin acos atan sinh
-cosh tanh sigmoid relu floor ceil round trunc sign square reciprocal`
+digamma ndtr log_ndtr ndtri bessel_j0 sinc sqrt rsqrt sin cos tan asin acos
+atan sinh cosh tanh sigmoid relu floor ceil round trunc sign square
+reciprocal`
 
 `log2`/`log10` are base-2/base-10 logarithms, `expm1` is `exp(x) - 1` with
 preserved precision near zero, `erf`/`erfc` are the error and complementary
 error functions, and `sinc` is the normalized `sin(pi x)/(pi x)` with
 `sinc(0) = 1`. `erfinv` is the inverse error function, `i0`/`i0e` are the
 modified Bessel function of order zero and its exponentially scaled form,
-`i1`/`i1e` are order one and its scaled form, `lgamma` is the log-gamma
-function, `digamma` is the psi function, `ndtr`/`log_ndtr` are the standard
-normal CDF and its log, and `ndtri` is the inverse normal CDF. All are
-ATen-backed and differentiable, and the module-level forms are `torch.log2`,
+`i1`/`i1e` are order one and its scaled form, `bessel_j0` is the ordinary
+Bessel function of order zero, `lgamma` is the log-gamma function, `digamma`
+is the psi function, `ndtr`/`log_ndtr` are the standard normal CDF and its
+log, and `ndtri` is the inverse normal CDF. All are ATen-backed and
+differentiable, and the module-level forms are `torch.log2`,
 `torch.log10`, `torch.expm1`, `torch.erf`, `torch.erfc`, `torch.erfinv`,
-`torch.i0`, `torch.i0e`, `torch.i1`, `torch.i1e`, `torch.lgamma`,
-`torch.digamma`, `torch.ndtr`, `torch.log_ndtr`, `torch.ndtri`, and
-`torch.sinc`.
+`torch.i0`, `torch.i0e`, `torch.i1`, `torch.i1e`, `torch.bessel_j0`,
+`torch.lgamma`, `torch.digamma`, `torch.ndtr`, `torch.log_ndtr`,
+`torch.ndtri`, and `torch.sinc`.
 
 Plus:
 
@@ -441,8 +443,11 @@ the input is clamped to `[eps, 1-eps]` first. Module-level forms are
 
 ```lua
 torch.special.erf / erfc / erfinv
-torch.special.i0 / i0e / i1 / i1e
+torch.special.i0 / i0e / i1 / i1e / bessel_j0
 torch.special.lgamma / digamma / psi   -- psi is an alias of digamma
+torch.special.polygamma(order, input)
+torch.special.mvlgamma(input, order)
+torch.special.igamma(a, b) / igammac(a, b)
 torch.special.ndtr / log_ndtr / ndtri
 torch.special.entr / xlogy / xlog1py
 torch.special.expit                    -- alias of sigmoid
@@ -450,6 +455,10 @@ torch.special.logit
 ```
 
 Each entry is the same function as its top-level `torch.*` counterpart.
+The Tensor forms are `t:polygamma(order)`, `t:mvlgamma(order)`,
+`t:igamma(other)`, and `t:igammac(other)`; `polygamma`/`mvlgamma` require an
+integer order and have `_` in-place variants, while the incomplete gamma
+functions accept broadcastable tensor operands.
 
 ## Linear algebra
 
@@ -1636,9 +1645,11 @@ model:load_safetensors("model.safetensors", { strip_prefix = "model." })
 `clamp`, `clamp_min`, `clamp_max`, `logit`, `relu`, `sigmoid`, `tanh`,
 `softplus`, `elu`, `selu`, `silu`, `gelu`, `deg2rad`, `rad2deg`, `softsign`,
 `hardsigmoid`, `hardswish`, `exp`, `expm1`, `log`, `log2`, `log10`, `erf`,
-`erfc`, `erfinv`, `i0`, `i0e`, `i1`, `i1e`, `lgamma`, `digamma`, `ndtr`,
-`log_ndtr`, `ndtri`, `sinc`, `sqrt`, `abs` are thin wrappers around the
-corresponding tensor methods.
+`erfc`, `erfinv`, `i0`, `i0e`, `i1`, `i1e`, `bessel_j0`, `lgamma`,
+`digamma`, `ndtr`, `log_ndtr`, `ndtri`, `sinc`, `sqrt`, `abs` are thin
+wrappers around the corresponding tensor methods. `torch.polygamma`,
+`torch.mvlgamma`, `torch.igamma`, and `torch.igammac` have the argument orders
+shown in the special-functions section.
 
 Other module helpers:
 

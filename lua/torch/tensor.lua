@@ -1427,6 +1427,82 @@ function Tensor:xlog1py(other)
     product.h))
 end
 
+function Tensor:polygamma(order)
+  if type(order) ~= "number" or order ~= order or order % 1 ~= 0 or
+      order < 0 or order == math.huge then
+    error("polygamma order must be a non-negative integer", 3)
+  end
+  local pointer = lib.lt_polygamma(self.h, math.floor(order), 0)
+  if pointer == nil then
+    error(last_error(), 3)
+  end
+  return wrap(pointer)
+end
+
+function Tensor:polygamma_(order)
+  if type(order) ~= "number" or order ~= order or order % 1 ~= 0 or
+      order < 0 or order == math.huge then
+    error("polygamma order must be a non-negative integer", 3)
+  end
+  if lib.lt_polygamma(self.h, math.floor(order), 1) == nil then
+    error(last_error(), 3)
+  end
+  return self
+end
+
+function Tensor:mvlgamma(order)
+  if type(order) ~= "number" or order ~= order or order % 1 ~= 0 or
+      order <= 0 or order == math.huge then
+    error("mvlgamma order must be a positive integer", 3)
+  end
+  local pointer = lib.lt_mvlgamma(self.h, math.floor(order), 0)
+  if pointer == nil then
+    error(last_error(), 3)
+  end
+  return wrap(pointer)
+end
+
+function Tensor:mvlgamma_(order)
+  if type(order) ~= "number" or order ~= order or order % 1 ~= 0 or
+      order <= 0 or order == math.huge then
+    error("mvlgamma order must be a positive integer", 3)
+  end
+  if lib.lt_mvlgamma(self.h, math.floor(order), 1) == nil then
+    error(last_error(), 3)
+  end
+  return self
+end
+
+local function incomplete_gamma(self, other, name, operation, inplace)
+  if not is_tensor(other) then
+    error(name .. " expects a tensor", 3)
+  end
+  local pointer = operation(self.h, other.h, inplace and 1 or 0)
+  if pointer == nil then
+    error(last_error(), 3)
+  end
+  if inplace then
+    return self
+  end
+  return wrap(pointer)
+end
+
+function Tensor:igamma(other)
+  return incomplete_gamma(self, other, "igamma", lib.lt_igamma, false)
+end
+
+function Tensor:igamma_(other)
+  return incomplete_gamma(self, other, "igamma", lib.lt_igamma, true)
+end
+
+function Tensor:igammac(other)
+  return incomplete_gamma(self, other, "igammac", lib.lt_igammac, false)
+end
+
+function Tensor:igammac_(other)
+  return incomplete_gamma(self, other, "igammac", lib.lt_igammac, true)
+end
+
 -- Inverse sigmoid: log(x / (1 - x)). With eps, the input is first clamped to
 -- [eps, 1 - eps] so exact 0/1 inputs produce finite values.
 function Tensor:logit(eps)
@@ -1577,6 +1653,7 @@ local unary_fns = {
   i0e = lib.lt_i0e, i1 = lib.lt_i1, i1e = lib.lt_i1e,
   lgamma = lib.lt_lgamma, digamma = lib.lt_digamma, ndtr = lib.lt_ndtr,
   log_ndtr = lib.lt_log_ndtr, ndtri = lib.lt_ndtri,
+  bessel_j0 = lib.lt_bessel_j0,
   sinc = lib.lt_sinc, sqrt = lib.lt_sqrt,
   rsqrt = lib.lt_rsqrt,
   sin = lib.lt_sin, cos = lib.lt_cos, tan = lib.lt_tan, asin = lib.lt_asin,
