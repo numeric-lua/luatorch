@@ -73,6 +73,10 @@ All notable changes to luatorch are recorded here. The format follows
   Bessel function of order zero, `lgamma` the log-gamma function, `digamma`
   the psi function, and `ndtr` the standard normal CDF, with `torch.*`
   aliases and in-place variants;
+- `log_ndtr` and `ndtri` expose the log normal CDF and its inverse, and
+  `i0e`, `i1`, and `i1e` expose the exponentially scaled order-zero Bessel,
+  order-one Bessel, and scaled order-one Bessel functions, with `torch.*`
+  aliases and in-place variants;
 - `torch.cummax` / `Tensor:cummax(dim?)` and `torch.cummin` /
   `Tensor:cummin(dim?)` return running extrema and 1-based indices along a
   dimension (default 1), with differentiable values;
@@ -194,20 +198,24 @@ All notable changes to luatorch are recorded here. The format follows
   validation;
 - `tests/test_special2.lua` covers `cummax`/`cummin` values, indices and
   gradients, `entr` boundaries and gradients, and `xlogy`/`xlog1py` values,
-  gradients, and validation.
+  gradients, and validation;
+- `tests/test_special3.lua` covers `log_ndtr`/`ndtri` identities,
+  `i0e`/`i1`/`i1e` values and scaling identities, gradients, in-place calls,
+  and alias validation.
 
 ### Changed
 
 - `docs/api.md` and its docs guards describe the new predicates, reductions,
   elementwise/math helpers, unary functions, activation helpers, tensor
   utilities, splitting/axis helpers, construction/search helpers, and
-  NaN/extrema/sorting helpers. Earlier batches add six unary, five binary, and
-  five special unary shim entry points (`log2`, `log10`, `expm1`, `erf`,
-  `erfc`, `sinc`; `fmod`, `atan2`, `copysign`, `floor_divide`, `heaviside`;
-  `erfinv`, `i0`, `lgamma`, `digamma`, `ndtr`); this cycle adds two reduction
-  shims (`cummax`, `cummin`) plus their header and FFI declarations. The
-  activation, angle, utility, sequence, split, construction, and elementwise
-  special helpers are pure Lua composites.
+  NaN/extrema/sorting helpers. Earlier batches add six unary, five binary,
+  five special unary, and two reduction shim entry points (`log2`, `log10`,
+  `expm1`, `erf`, `erfc`, `sinc`; `fmod`, `atan2`, `copysign`,
+  `floor_divide`, `heaviside`; `erfinv`, `i0`, `lgamma`, `digamma`, `ndtr`;
+  `cummax`, `cummin`); this cycle adds five more special unary entry points
+  (`log_ndtr`, `ndtri`, `i0e`, `i1`, `i1e`) plus their header and FFI
+  declarations. The activation, angle, utility, sequence, split, construction,
+  and elementwise special helpers are pure Lua composites.
 
 ## [0.34.0] — 2026-11-24
 

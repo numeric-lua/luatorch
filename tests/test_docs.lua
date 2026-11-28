@@ -56,7 +56,8 @@ test("documented public functions exist", function()
       "logcumsumexp", "fmod", "atan2", "copysign", "floor_divide",
       "heaviside", "deg2rad", "rad2deg", "softsign", "hardsigmoid",
       "hardswish", "erfinv", "i0", "lgamma", "digamma", "ndtr",
-      "cummax", "cummin", "entr", "xlogy", "xlog1py" }) do
+      "cummax", "cummin", "entr", "xlogy", "xlog1py",
+      "log_ndtr", "ndtri", "i0e", "i1", "i1e" }) do
     assert_true(api:find("torch." .. name, 1, true) ~= nil,
       "docs/api.md does not mention torch." .. name)
     assert_eq(type(torch[name]), "function", "torch." .. name .. " is missing")

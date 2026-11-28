@@ -9,7 +9,12 @@
 #include "luatorch.h"
 
 #include <ATen/ATen.h>
+#include <ATen/ops/special_i0e.h>
+#include <ATen/ops/special_i1.h>
+#include <ATen/ops/special_i1e.h>
+#include <ATen/ops/special_log_ndtr.h>
 #include <ATen/ops/special_ndtr.h>
+#include <ATen/ops/special_ndtri.h>
 #include <ATen/Parallel.h>
 #include <c10/util/Logging.h>
 #include <torch/csrc/autograd/custom_function.h>
@@ -1998,6 +2003,28 @@ lt_tensor* lt_ndtr(lt_tensor* a, int inplace) {
   }
   LT_CATCH_NULL
 }
+
+#define LT_SPECIAL_UNARY(name, function)                        \
+  lt_tensor* lt_##name(lt_tensor* a, int inplace) {             \
+    try {                                                       \
+      clear_error();                                            \
+      auto result = function(a->t);                             \
+      if (inplace) {                                            \
+        a->t.copy_(result);                                     \
+        return a;                                               \
+      }                                                         \
+      return wrap(result);                                      \
+    }                                                           \
+    LT_CATCH_NULL                                               \
+  }
+
+LT_SPECIAL_UNARY(log_ndtr, at::special_log_ndtr)
+LT_SPECIAL_UNARY(ndtri, at::special_ndtri)
+LT_SPECIAL_UNARY(i0e, at::special_i0e)
+LT_SPECIAL_UNARY(i1, at::special_i1)
+LT_SPECIAL_UNARY(i1e, at::special_i1e)
+
+#undef LT_SPECIAL_UNARY
 
 lt_tensor* lt_clamp(lt_tensor* a, double lo, double hi, int inplace) {
   try {
