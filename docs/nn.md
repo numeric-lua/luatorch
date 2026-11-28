@@ -94,6 +94,11 @@ references.
 | `nn.ReLU(inplace?)` | rectifier |
 | `nn.LeakyReLU(slope?, inplace?)` | leaky rectifier |
 | `nn.Sigmoid()` / `nn.Tanh()` | elementwise activations |
+| `nn.Softplus(beta?, threshold?)` | default `beta = 1`, `threshold = 20` |
+| `nn.ELU(alpha?, inplace?)` | default `alpha = 1` |
+| `nn.SELU(inplace?)` | scaled exponential linear unit |
+| `nn.SiLU(inplace?)` | `x * sigmoid(x)` |
+| `nn.GELU(approximate?)` | exact `erf` form or `"tanh"` approximation |
 | `nn.Softmax(dim?)` / `nn.LogSoftmax(dim?)` | default dim is the last one |
 | `nn.Flatten(start_dim?, end_dim?)` | defaults `start_dim = 2`, `end_dim = -1` |
 | `nn.Identity()` | pass-through |

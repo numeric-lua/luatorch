@@ -125,6 +125,97 @@ function Tanh:forward(input)
   return input:tanh()
 end
 
+local Softplus = class("Softplus")
+
+function Softplus.new(beta, threshold)
+  local self = setmetatable(Module.new(), Softplus)
+  self.beta = beta or 1
+  self.threshold = threshold or 20
+  return self
+end
+
+function Softplus:forward(input)
+  return input:softplus(self.beta, self.threshold)
+end
+
+function Softplus:format()
+  return string.format("Softplus(beta=%g, threshold=%g)",
+    self.beta, self.threshold)
+end
+
+local ELU = class("ELU")
+
+function ELU.new(alpha, inplace)
+  local self = setmetatable(Module.new(), ELU)
+  self.alpha = alpha or 1
+  self.inplace = inplace and true or false
+  return self
+end
+
+function ELU:forward(input)
+  local output = input:elu(self.alpha)
+  if self.inplace then
+    input:copy_(output)
+    return input
+  end
+  return output
+end
+
+function ELU:format()
+  return string.format("ELU(alpha=%g, inplace=%s)", self.alpha,
+    tostring(self.inplace))
+end
+
+local SELU = class("SELU")
+
+function SELU.new(inplace)
+  local self = setmetatable(Module.new(), SELU)
+  self.inplace = inplace and true or false
+  return self
+end
+
+function SELU:forward(input)
+  local output = input:selu()
+  if self.inplace then
+    input:copy_(output)
+    return input
+  end
+  return output
+end
+
+local SiLU = class("SiLU")
+
+function SiLU.new(inplace)
+  local self = setmetatable(Module.new(), SiLU)
+  self.inplace = inplace and true or false
+  return self
+end
+
+function SiLU:forward(input)
+  local output = input:silu()
+  if self.inplace then
+    input:copy_(output)
+    return input
+  end
+  return output
+end
+
+local GELU = class("GELU")
+
+function GELU.new(approximate)
+  local self = setmetatable(Module.new(), GELU)
+  self.approximate = approximate or "none"
+  return self
+end
+
+function GELU:forward(input)
+  return input:gelu(self.approximate)
+end
+
+function GELU:format()
+  return string.format("GELU(approximate=%q)", self.approximate)
+end
+
 local Softmax = class("Softmax")
 
 function Softmax.new(dim)
@@ -253,6 +344,11 @@ return {
   LeakyReLU = LeakyReLU,
   Sigmoid = Sigmoid,
   Tanh = Tanh,
+  Softplus = Softplus,
+  ELU = ELU,
+  SELU = SELU,
+  SiLU = SiLU,
+  GELU = GELU,
   Softmax = Softmax,
   LogSoftmax = LogSoftmax,
   Identity = Identity,

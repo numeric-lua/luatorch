@@ -97,6 +97,8 @@ All notable changes to luatorch are recorded here. The format follows
 - `torch.nn.functional` gains `softplus`, `elu`, `selu`, `silu`, `gelu`,
   `hardsigmoid`, `hardswish`, and `softsign` wrappers, with `inplace` support
   where the underlying activation supports it;
+- `torch.nn` gains `Softplus`, `ELU`, `SELU`, `SiLU`, and `GELU` activation
+  modules with PyTorch-compatible constructor options and `format` output;
 - `torch.cummax` / `Tensor:cummax(dim?)` and `torch.cummin` /
   `Tensor:cummin(dim?)` return running extrema and 1-based indices along a
   dimension (default 1), with differentiable values;
@@ -227,7 +229,10 @@ All notable changes to luatorch are recorded here. The format follows
   validation;
 - `tests/test_namespace_extra.lua` covers `mode`, `nanmedian`/`nanquantile`,
   the `torch.special` aliases, and the new `nn.functional` activation wrappers,
-  including in-place forms.
+  including in-place forms;
+- `tests/test_nn_activation.lua` covers `Softplus`, `ELU`, `SELU`, `SiLU`, and
+  `GELU` module values, in-place behavior, `format` output, Sequential
+  composition, autograd, and float16 dtype preservation.
 
 ### Changed
 
@@ -239,11 +244,12 @@ All notable changes to luatorch are recorded here. The format follows
   points (`log2`, `log10`, `expm1`, `erf`, `erfc`, `sinc`; `fmod`, `atan2`,
   `copysign`, `floor_divide`, `heaviside`; `erfinv`, `i0`, `lgamma`,
   `digamma`, `ndtr`; `cummax`, `cummin`; `mode`, `nanmedian`,
-  `nanquantile`); this cycle adds five more special shims (`bessel_j0`,
+  `nanquantile`); a recent batch adds five special shims (`bessel_j0`,
   `polygamma`, `mvlgamma`, `igamma`, `igammac`) plus their header and FFI
-  declarations. The `torch.special` namespace, `nn.functional` wrappers, and
-  the activation, angle, utility, sequence, split, construction, and
-  elementwise special helpers are pure Lua.
+  declarations. The `torch.special` namespace, `nn.functional` wrappers, the
+  `Softplus`/`ELU`/`SELU`/`SiLU`/`GELU` modules, and the activation, angle,
+  utility, sequence, split, construction, and elementwise special helpers are
+  pure Lua.
 
 ## [0.34.0] — 2026-11-24
 

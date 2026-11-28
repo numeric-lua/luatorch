@@ -179,6 +179,7 @@ local files = {
   "test_autograd.lua",
   "test_nn.lua",
   "test_nn_extra.lua",
+  "test_nn_activation.lua",
   "test_optim.lua",
   "test_optim_extra.lua",
   "test_data.lua",
