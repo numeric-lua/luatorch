@@ -99,6 +99,16 @@ All notable changes to luatorch are recorded here. The format follows
   where the underlying activation supports it;
 - `torch.nn` gains `Softplus`, `ELU`, `SELU`, `SiLU`, and `GELU` activation
   modules with PyTorch-compatible constructor options and `format` output;
+- `torch.empty_like(t, opts?)` allocates uninitialized storage with the input
+  shape and dtype, with optional dtype overrides;
+- `torch.logspace(start, stop, steps, base?, opts?)` generates geometric
+  sequences for floating dtypes, with `base = 10` by default;
+- `torch.randint(low, high, shape..., opts?)` samples integers in
+  `[low, high)`, defaults to `int64`, and accepts either a shape table or
+  trailing dimensions;
+- `torch.promote_types(first, second)` and `torch.result_type(first, second)`
+  expose dtype promotion as numeric dtype ids, covering bool/integer/float
+  categories, widening, and `uint8` plus signed 8-bit promotion;
 - `torch.cummax` / `Tensor:cummax(dim?)` and `torch.cummin` /
   `Tensor:cummin(dim?)` return running extrema and 1-based indices along a
   dimension (default 1), with differentiable values;
@@ -232,7 +242,18 @@ All notable changes to luatorch are recorded here. The format follows
   including in-place forms;
 - `tests/test_nn_activation.lua` covers `Softplus`, `ELU`, `SELU`, `SiLU`, and
   `GELU` module values, in-place behavior, `format` output, Sequential
-  composition, autograd, and float16 dtype preservation.
+  composition, autograd, and float16 dtype preservation;
+- `tests/test_creation_extra.lua` covers `empty_like`, `logspace`, `randint`,
+  dtype promotion, and the repaired `ones_like`/`full_like`/`bincount`/`histc`
+  paths.
+
+### Fixed
+
+- `torch.ones_like`, `torch.full_like`, `torch.bincount`, and `torch.histc`
+  are exported top-level functions again; a previous edit had nested their
+  definitions inside `torch.ones_like`, leaving `torch.bincount`/`torch.histc`
+  undefined. `torch.histc` also uses LuaJIT's `unpack` instead of the missing
+  `table.unpack`.
 
 ### Changed
 
@@ -247,9 +268,8 @@ All notable changes to luatorch are recorded here. The format follows
   `nanquantile`); a recent batch adds five special shims (`bessel_j0`,
   `polygamma`, `mvlgamma`, `igamma`, `igammac`) plus their header and FFI
   declarations. The `torch.special` namespace, `nn.functional` wrappers, the
-  `Softplus`/`ELU`/`SELU`/`SiLU`/`GELU` modules, and the activation, angle,
-  utility, sequence, split, construction, and elementwise special helpers are
-  pure Lua.
+  `Softplus`/`ELU`/`SELU`/`SiLU`/`GELU` modules, the new creation helpers, and
+  dtype promotion are pure Lua.
 
 ## [0.34.0] — 2026-11-24
 

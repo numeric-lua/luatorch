@@ -140,17 +140,25 @@ torch.full(shape..., value, opts?)
 torch.eye(n, opts?)
 torch.arange(stop, opts?)           -- or (start, stop[, step], opts?)
 torch.linspace(start, stop, steps, opts?)
+torch.logspace(start, stop, steps, base?, opts?)
 torch.randperm(n, opts?)
+torch.randint(low, high, shape..., opts?)  -- high exclusive; (high, shape) uses low = 0
 ```
 
 `torch.tensor` infers `bool` for boolean tables and `float32` otherwise. Passing
 an existing tensor returns a clone.
+
+`torch.logspace` exponentiates a linear spacing in the requested floating
+dtype; `base` defaults to `10`. `torch.randint` samples integer values in
+`[low, high)`, defaults to `int64`, and accepts either a shape table or trailing
+shape dimensions.
 
 Like-constructors:
 
 ```lua
 torch.zeros_like(t, opts?)
 torch.ones_like(t, opts?)
+torch.empty_like(t, opts?)
 torch.full_like(t, value, opts?)
 torch.rand_like(t)
 torch.randn_like(t)
@@ -198,6 +206,19 @@ torch.LongTensor({1, 2, 3})
 torch.IntTensor(...)   torch.ShortTensor(...)   torch.CharTensor(...)
 torch.ByteTensor(...)  torch.BoolTensor(...)    torch.HalfTensor(...)
 ```
+
+## Dtype promotion
+
+```lua
+torch.promote_types(first, second)  -- dtype id
+torch.result_type(first_tensor, second_tensor)  -- dtype id
+```
+
+`torch.promote_types` accepts dtype ids, names, or aliases and returns the
+promoted numeric id. Booleans defer to the other operand, integers widen to the
+larger signed width (`uint8` plus a signed 8-bit type becomes `int16`), floats
+take precedence over integers, and larger floats win. `torch.result_type` is
+the tensor-only form; it promotes the two tensor dtypes and rejects scalars.
 
 ## Tensor metadata
 

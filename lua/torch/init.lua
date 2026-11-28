@@ -58,6 +58,75 @@ torch.half = 8
 
 local default_dtype = 0
 
+-- dtype promotion ------------------------------------------------------------
+-- Category 0 is bool, 1 is integer, and 2 is floating point. Unsigned uint8
+-- only widens to int16 when combined with a signed 8-bit type.
+
+local dtype_promotion = {
+  [7] = { category = 0, bits = 0 },
+  [6] = { category = 1, bits = 8, unsigned = true },
+  [5] = { category = 1, bits = 8 },
+  [4] = { category = 1, bits = 16 },
+  [3] = { category = 1, bits = 32 },
+  [2] = { category = 1, bits = 64 },
+  [8] = { category = 2, bits = 16 },
+  [0] = { category = 2, bits = 32 },
+  [1] = { category = 2, bits = 64 },
+}
+
+local integer_by_bits = { [8] = 5, [16] = 4, [32] = 3, [64] = 2 }
+local float_by_bits = { [16] = 8, [32] = 0, [64] = 1 }
+
+local function promote_dtype_ids(first, second)
+  if first == second then
+    return first
+  end
+  local a, b = dtype_promotion[first], dtype_promotion[second]
+  if a.category ~= b.category then
+    if a.category > b.category then
+      return first
+    end
+    return second
+  end
+  if a.category == 0 then
+    return first
+  elseif a.category == 2 then
+    return float_by_bits[math.max(a.bits, b.bits)]
+  end
+  if a.unsigned and b.unsigned then
+    return 6
+  end
+  if a.unsigned or b.unsigned then
+    local signed = a.unsigned and b or a
+    if signed.bits <= 8 then
+      return 4
+    end
+    return integer_by_bits[math.max(16, signed.bits)]
+  end
+  return integer_by_bits[math.max(a.bits, b.bits)]
+end
+
+local function resolve_dtype_argument(value, name)
+  local resolved = Tensor.resolve_dtype(value)
+  if resolved == nil then
+    error(name .. " expects a dtype id, name, or alias", 3)
+  end
+  return resolved
+end
+
+function torch.promote_types(first, second)
+  return promote_dtype_ids(
+    resolve_dtype_argument(first, "promote_types"),
+    resolve_dtype_argument(second, "promote_types"))
+end
+
+function torch.result_type(first, second)
+  if not Tensor.is_tensor(first) or not Tensor.is_tensor(second) then
+    error("result_type expects two tensors", 2)
+  end
+  return promote_dtype_ids(first:dtype_id(), second:dtype_id())
+end
+
 local function with_default(opts)
   opts = opts or {}
   if opts.dtype ~= nil then
@@ -157,9 +226,79 @@ function torch.linspace(start, stop, steps, opts)
   return Tensor._wrap(lib.lt_linspace(start, stop, steps, Tensor.resolve_dtype(opts.dtype)))
 end
 
+function torch.logspace(start, stop, steps, base, opts)
+  steps = steps or 100
+  if type(base) == "table" then
+    opts = base
+    base = 10
+  end
+  base = base or 10
+  if type(base) ~= "number" or base ~= base or base <= 0 or
+      base == math.huge then
+    error("logspace base must be a positive finite number", 2)
+  end
+  opts = with_default(opts)
+  local dtype = Tensor.resolve_dtype(opts.dtype)
+  if dtype ~= torch.float16 and dtype ~= torch.float32 and
+      dtype ~= torch.float64 then
+    error("logspace supports floating dtypes", 2)
+  end
+  local exponents = torch.linspace(start, stop, steps, { dtype = dtype })
+  return exponents:mul(math.log(base)):exp()
+end
+
 function torch.randperm(n, opts)
   opts = with_default(opts)
   return Tensor._wrap(lib.lt_randperm(n, Tensor.resolve_dtype(opts.dtype)))
+end
+
+function torch.randint(...)
+  local args = { ... }
+  local opts = {}
+  if #args > 0 and Tensor._is_options(args[#args]) then
+    opts = table.remove(args)
+  end
+  local low, high
+  if type(args[1]) == "number" and type(args[2]) == "number" then
+    low = table.remove(args, 1)
+    high = table.remove(args, 1)
+  elseif type(args[1]) == "number" and type(args[2]) == "table" then
+    low = 0
+    high = table.remove(args, 1)
+  else
+    error("randint expects low/high bounds and a shape", 2)
+  end
+  if type(low) ~= "number" or low % 1 ~= 0 or
+      type(high) ~= "number" or high % 1 ~= 0 then
+    error("randint bounds must be integers", 2)
+  end
+  if high <= low then
+    error("randint requires high > low", 2)
+  end
+  local shape
+  if #args == 1 and type(args[1]) == "table" then
+    shape = args[1]
+  else
+    shape = args
+  end
+  if #shape == 0 then
+    error("randint expects a tensor shape", 2)
+  end
+  for i = 1, #shape do
+    local value = shape[i]
+    if type(value) ~= "number" or value < 0 or value % 1 ~= 0 then
+      error("randint shape must contain non-negative integers", 2)
+    end
+  end
+  local dtype = Tensor.resolve_dtype(opts.dtype or torch.int64)
+  local sample_dtype = torch.float64
+  if dtype == torch.float16 or dtype == torch.float32 or
+      dtype == torch.float64 then
+    sample_dtype = dtype
+  end
+  local values = torch.rand(shape, { dtype = sample_dtype })
+  values = values:mul(high - low):floor():add(low)
+  return values:to(dtype)
 end
 
 -- like-constructors ----------------------------------------------------------
@@ -172,8 +311,30 @@ function torch.zeros_like(t, opts)
   return out:zero_()
 end
 
+function torch.empty_like(t, opts)
+  if not Tensor.is_tensor(t) then
+    error("torch.empty_like expects a tensor", 2)
+  end
+  opts = opts or {}
+  local options = {}
+  for key, value in pairs(opts) do
+    options[key] = value
+  end
+  if options.dtype == nil then
+    options.dtype = t:dtype()
+  end
+  return Tensor._create("empty", t:sizes(), options)
+end
+
 function torch.ones_like(t, opts)
-  local function vector_values(input, name)
+  local out = t:detach():clone()
+  if opts and opts.dtype then
+    out = out:to(opts.dtype)
+  end
+  return out:fill_(1)
+end
+
+local function vector_values(input, name)
   if not Tensor.is_tensor(input) then input = torch.tensor(input) end
   if input:dim() ~= 1 then error(name .. " expects a 1-D tensor", 3) end
   return input
@@ -217,8 +378,8 @@ function torch.histc(input, bins, min, max)
   end
   local values = input:to(torch.float64):totable()
   if #values == 0 then return torch.zeros(bins, { dtype = torch.int64 }) end
-  min = min or math.min(table.unpack(values))
-  max = max or math.max(table.unpack(values))
+  min = min or math.min(unpack(values))
+  max = max or math.max(unpack(values))
   if min > max then error("histc min must not exceed max", 3) end
   local counts = {}
   for i = 1, bins do counts[i] = 0 end
@@ -237,79 +398,14 @@ function torch.histc(input, bins, min, max)
     end
   end
   return torch.tensor(counts, { dtype = torch.int64 })
-end
-
-return torch.zeros_like(t, opts):fill_(1)
 end
 
 function torch.full_like(t, value, opts)
-  local function vector_values(input, name)
-  if not Tensor.is_tensor(input) then input = torch.tensor(input) end
-  if input:dim() ~= 1 then error(name .. " expects a 1-D tensor", 3) end
-  return input
-end
-
-function torch.bincount(input, weights, minlength)
-  input = vector_values(input, "bincount")
-  local values = input:to(torch.int64):totable()
-  local weight_values
-  if weights ~= nil then
-    weights = vector_values(weights, "bincount weights")
-    if weights:numel() ~= #values then
-      error("bincount weights length mismatch", 3)
-    end
-    weight_values = weights:to(torch.float64):totable()
+  local out = t:detach():clone()
+  if opts and opts.dtype then
+    out = out:to(opts.dtype)
   end
-  if minlength ~= nil and (type(minlength) ~= "number" or minlength < 0 or
-      minlength % 1 ~= 0) then
-    error("bincount minlength must be a non-negative integer", 3)
-  end
-  local maximum = -1
-  for _, value in ipairs(values) do
-    if value < 0 then error("bincount input must be non-negative", 3) end
-    if value > maximum then maximum = value end
-  end
-  local length = math.max(maximum + 1, minlength or 0)
-  local counts = {}
-  for i = 1, length do counts[i] = 0 end
-  for i, value in ipairs(values) do
-    counts[value + 1] = counts[value + 1] +
-      (weight_values and weight_values[i] or 1)
-  end
-  return torch.tensor(counts, { dtype = weights and torch.float64 or torch.int64 })
-end
-
-function torch.histc(input, bins, min, max)
-  input = vector_values(input, "histc")
-  bins = bins or 100
-  if type(bins) ~= "number" or bins < 1 or bins % 1 ~= 0 then
-    error("histc bins must be a positive integer", 3)
-  end
-  local values = input:to(torch.float64):totable()
-  if #values == 0 then return torch.zeros(bins, { dtype = torch.int64 }) end
-  min = min or math.min(table.unpack(values))
-  max = max or math.max(table.unpack(values))
-  if min > max then error("histc min must not exceed max", 3) end
-  local counts = {}
-  for i = 1, bins do counts[i] = 0 end
-  if min == max then
-    for _, value in ipairs(values) do
-      if value == min then counts[1] = counts[1] + 1 end
-    end
-  else
-    local width = (max - min) / bins
-    for _, value in ipairs(values) do
-      if value >= min and value <= max then
-        local index = math.floor((value - min) / width) + 1
-        if index > bins then index = bins end
-        counts[index] = counts[index] + 1
-      end
-    end
-  end
-  return torch.tensor(counts, { dtype = torch.int64 })
-end
-
-return torch.zeros_like(t, opts):fill_(value)
+  return out:fill_(value)
 end
 
 local function random_like(t, opts, generator)
@@ -2456,72 +2552,6 @@ setmetatable(torch, {
     return nil
   end,
 })
-
-local function vector_values(input, name)
-  if not Tensor.is_tensor(input) then input = torch.tensor(input) end
-  if input:dim() ~= 1 then error(name .. " expects a 1-D tensor", 3) end
-  return input
-end
-
-function torch.bincount(input, weights, minlength)
-  input = vector_values(input, "bincount")
-  local values = input:to(torch.int64):totable()
-  local weight_values
-  if weights ~= nil then
-    weights = vector_values(weights, "bincount weights")
-    if weights:numel() ~= #values then
-      error("bincount weights length mismatch", 3)
-    end
-    weight_values = weights:to(torch.float64):totable()
-  end
-  if minlength ~= nil and (type(minlength) ~= "number" or minlength < 0 or
-      minlength % 1 ~= 0) then
-    error("bincount minlength must be a non-negative integer", 3)
-  end
-  local maximum = -1
-  for _, value in ipairs(values) do
-    if value < 0 then error("bincount input must be non-negative", 3) end
-    if value > maximum then maximum = value end
-  end
-  local length = math.max(maximum + 1, minlength or 0)
-  local counts = {}
-  for i = 1, length do counts[i] = 0 end
-  for i, value in ipairs(values) do
-    counts[value + 1] = counts[value + 1] +
-      (weight_values and weight_values[i] or 1)
-  end
-  return torch.tensor(counts, { dtype = weights and torch.float64 or torch.int64 })
-end
-
-function torch.histc(input, bins, min, max)
-  input = vector_values(input, "histc")
-  bins = bins or 100
-  if type(bins) ~= "number" or bins < 1 or bins % 1 ~= 0 then
-    error("histc bins must be a positive integer", 3)
-  end
-  local values = input:to(torch.float64):totable()
-  if #values == 0 then return torch.zeros(bins, { dtype = torch.int64 }) end
-  min = min or math.min(table.unpack(values))
-  max = max or math.max(table.unpack(values))
-  if min > max then error("histc min must not exceed max", 3) end
-  local counts = {}
-  for i = 1, bins do counts[i] = 0 end
-  if min == max then
-    for _, value in ipairs(values) do
-      if value == min then counts[1] = counts[1] + 1 end
-    end
-  else
-    local width = (max - min) / bins
-    for _, value in ipairs(values) do
-      if value >= min and value <= max then
-        local index = math.floor((value - min) / width) + 1
-        if index > bins then index = bins end
-        counts[index] = counts[index] + 1
-      end
-    end
-  end
-  return torch.tensor(counts, { dtype = torch.int64 })
-end
 
 torch.special = {
   erf = torch.erf,
