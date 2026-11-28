@@ -77,6 +77,18 @@ All notable changes to luatorch are recorded here. The format follows
   `i0e`, `i1`, and `i1e` expose the exponentially scaled order-zero Bessel,
   order-one Bessel, and scaled order-one Bessel functions, with `torch.*`
   aliases and in-place variants;
+- `torch.mode` / `Tensor:mode(dim?, keepdim?)` returns the most frequent value
+  and its 1-based index along a dimension;
+- `torch.nanmedian` / `Tensor:nanmedian(dim?, keepdim?)` and
+  `torch.nanquantile` / `Tensor:nanquantile(q, dim?, keepdim?)` add
+  NaN-ignoring median and interpolated quantile reductions, with optional
+  1-based indices for the dimension form of `nanmedian`;
+- `torch.special` mirrors the PyTorch special-function namespace (`erf`,
+  `erfc`, `erfinv`, `i0`, `i0e`, `i1`, `i1e`, `lgamma`, `digamma`/`psi`,
+  `ndtr`, `log_ndtr`, `ndtri`, `entr`, `xlogy`, `xlog1py`, `expit`, `logit`);
+- `torch.nn.functional` gains `softplus`, `elu`, `selu`, `silu`, `gelu`,
+  `hardsigmoid`, `hardswish`, and `softsign` wrappers, with `inplace` support
+  where the underlying activation supports it;
 - `torch.cummax` / `Tensor:cummax(dim?)` and `torch.cummin` /
   `Tensor:cummin(dim?)` return running extrema and 1-based indices along a
   dimension (default 1), with differentiable values;
@@ -201,7 +213,10 @@ All notable changes to luatorch are recorded here. The format follows
   gradients, and validation;
 - `tests/test_special3.lua` covers `log_ndtr`/`ndtri` identities,
   `i0e`/`i1`/`i1e` values and scaling identities, gradients, in-place calls,
-  and alias validation.
+  and alias validation;
+- `tests/test_namespace_extra.lua` covers `mode`, `nanmedian`/`nanquantile`,
+  the `torch.special` aliases, and the new `nn.functional` activation wrappers,
+  including in-place forms.
 
 ### Changed
 
@@ -212,10 +227,11 @@ All notable changes to luatorch are recorded here. The format follows
   five special unary, and two reduction shim entry points (`log2`, `log10`,
   `expm1`, `erf`, `erfc`, `sinc`; `fmod`, `atan2`, `copysign`,
   `floor_divide`, `heaviside`; `erfinv`, `i0`, `lgamma`, `digamma`, `ndtr`;
-  `cummax`, `cummin`); this cycle adds five more special unary entry points
-  (`log_ndtr`, `ndtri`, `i0e`, `i1`, `i1e`) plus their header and FFI
-  declarations. The activation, angle, utility, sequence, split, construction,
-  and elementwise special helpers are pure Lua composites.
+  `cummax`, `cummin`); this cycle adds three reduction/selection shims
+  (`mode`, `nanmedian`, `nanquantile`) plus their header and FFI
+  declarations. The `torch.special` namespace, `nn.functional` wrappers, and
+  the activation, angle, utility, sequence, split, construction, and
+  elementwise special helpers are pure Lua.
 
 ## [0.34.0] — 2026-11-24
 

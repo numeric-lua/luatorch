@@ -261,8 +261,11 @@ t:take(index)                      -- flattened 1-based gather; index shape is o
 t:unique(sorted?, inverse?, counts?) -- values[, inverse, counts]; inverse is 1-based
 t:unique_consecutive(inverse?, counts?) -- collapse adjacent duplicates
 t:kthvalue(k, dim?, keepdim?)      -- k-th value and 1-based index
+t:mode(dim?, keepdim?)             -- most frequent value and 1-based index
 t:median(dim?)                    -- median value or dimension median
+t:nanmedian(dim?, keepdim?)       -- median ignoring NaN, optional index
 t:quantile(q, dim?, keepdim?)     -- interpolated quantile
+t:nanquantile(q, dim?, keepdim?)  -- interpolated quantile ignoring NaN
 t:diff(n?, dim?)                  -- n-th discrete difference, default n=1, last dim
 ```
 
@@ -287,6 +290,13 @@ default), returns the k-th smallest value and its 1-based index, and requires a
 positive `k` within the dimension size. `unique_consecutive(inverse?, counts?)`
 collapses only adjacent equal elements of the flattened input and optionally
 returns 1-based inverse indices and per-run counts.
+
+`mode(dim?, keepdim?)` returns the most frequent value and its 1-based index
+along the last dimension by default. `nanmedian(dim?, keepdim?)` returns the
+median ignoring NaNs; without a dimension it returns a single value, and with a
+dimension it also returns the 1-based source index. `nanquantile(q, dim?,
+keepdim?)` interpolates the requested quantile over the non-NaN entries with
+linear interpolation, matching `quantile` but ignoring NaNs.
 
 `torch.searchsorted(sorted_sequence, values, right?)` binary-searches a 1-D
 sorted sequence and returns int64 insertion positions. Positions are **1-based**
@@ -424,6 +434,22 @@ they accept float16/float32/float64 inputs and preserve NaN entries.
 `logit(eps?)` is the inverse sigmoid `log(x/(1-x))`; with `eps` in `[0, 0.5)`
 the input is clamped to `[eps, 1-eps]` first. Module-level forms are
 `torch.clamp_min`, `torch.clamp_max`, and `torch.logit`.
+
+## Special functions
+
+`torch.special` mirrors the PyTorch namespace with the same wrappers:
+
+```lua
+torch.special.erf / erfc / erfinv
+torch.special.i0 / i0e / i1 / i1e
+torch.special.lgamma / digamma / psi   -- psi is an alias of digamma
+torch.special.ndtr / log_ndtr / ndtri
+torch.special.entr / xlogy / xlog1py
+torch.special.expit                    -- alias of sigmoid
+torch.special.logit
+```
+
+Each entry is the same function as its top-level `torch.*` counterpart.
 
 ## Linear algebra
 
@@ -1643,6 +1669,8 @@ torch.fmod(a, b) / torch.floor_divide(a, b)
 torch.atan2(a, b) / torch.copysign(a, b)
 torch.heaviside(input, values)
 torch.kthvalue(t, k, dim?, keepdim?) / torch.unique_consecutive(t, ...)
+torch.mode(t, dim?, keepdim?) / torch.nanmedian(t, dim?, keepdim?)
+torch.nanquantile(t, q, dim?, keepdim?)
 torch.logcumsumexp(t, dim?)       -- cumulative log-sum-exp
 torch.cummax(t, dim?) / torch.cummin(t, dim?)
 torch.entr(t) / torch.xlogy(a, b) / torch.xlog1py(a, b)

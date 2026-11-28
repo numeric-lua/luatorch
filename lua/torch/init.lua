@@ -1331,6 +1331,27 @@ function torch.kthvalue(tensor, k, dim, keepdim)
   return tensor:kthvalue(k, dim, keepdim)
 end
 
+function torch.mode(tensor, dim, keepdim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.mode expects a tensor", 2)
+  end
+  return tensor:mode(dim, keepdim)
+end
+
+function torch.nanmedian(tensor, dim, keepdim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.nanmedian expects a tensor", 2)
+  end
+  return tensor:nanmedian(dim, keepdim)
+end
+
+function torch.nanquantile(tensor, q, dim, keepdim)
+  if not Tensor.is_tensor(tensor) then
+    error("torch.nanquantile expects a tensor", 2)
+  end
+  return tensor:nanquantile(q, dim, keepdim)
+end
+
 function torch.logcumsumexp(tensor, dim)
   if not Tensor.is_tensor(tensor) then
     error("torch.logcumsumexp expects a tensor", 2)
@@ -2476,5 +2497,26 @@ function torch.histc(input, bins, min, max)
   end
   return torch.tensor(counts, { dtype = torch.int64 })
 end
+
+torch.special = {
+  erf = torch.erf,
+  erfc = torch.erfc,
+  erfinv = torch.erfinv,
+  i0 = torch.i0,
+  i0e = torch.i0e,
+  i1 = torch.i1,
+  i1e = torch.i1e,
+  lgamma = torch.lgamma,
+  digamma = torch.digamma,
+  psi = torch.digamma,
+  ndtr = torch.ndtr,
+  log_ndtr = torch.log_ndtr,
+  ndtri = torch.ndtri,
+  entr = torch.entr,
+  xlogy = torch.xlogy,
+  xlog1py = torch.xlog1py,
+  expit = torch.sigmoid,
+  logit = torch.logit,
+}
 
 return torch

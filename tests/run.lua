@@ -173,6 +173,7 @@ local files = {
   "test_special_extra.lua",
   "test_special2.lua",
   "test_special3.lua",
+  "test_namespace_extra.lua",
   "test_random.lua",
   "test_autograd.lua",
   "test_nn.lua",

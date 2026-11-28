@@ -18,6 +18,7 @@
 #include <ATen/Parallel.h>
 #include <c10/util/Logging.h>
 #include <torch/csrc/autograd/custom_function.h>
+#include <optional>
 
 extern "C" {
 void lt_log_softmax_f32(
@@ -3308,6 +3309,61 @@ int lt_cummin(lt_tensor* a, int64_t dim, lt_tensor** values,
     return 0;
   }
   LT_CATCH_INT
+}
+
+int lt_mode(lt_tensor* a, int64_t dim, int keepdim, lt_tensor** values,
+            lt_tensor** indices) {
+  try {
+    clear_error();
+    if (values == nullptr || indices == nullptr) {
+      throw std::runtime_error("mode: null output pointer");
+    }
+    int64_t d = resolve_dim(dim, a->t.dim(), "mode");
+    auto result = a->t.mode(d, keepdim != 0);
+    *values = wrap(std::get<0>(result));
+    *indices = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
+int lt_nanmedian(lt_tensor* a, int64_t dim, int has_dim, int keepdim,
+                 lt_tensor** values, lt_tensor** indices) {
+  try {
+    clear_error();
+    if (values == nullptr) {
+      throw std::runtime_error("nanmedian: null output pointer");
+    }
+    if (!has_dim) {
+      *values = wrap(a->t.nanmedian());
+      if (indices != nullptr) {
+        *indices = nullptr;
+      }
+      return 0;
+    }
+    if (indices == nullptr) {
+      throw std::runtime_error("nanmedian: null index pointer");
+    }
+    int64_t d = resolve_dim(dim, a->t.dim(), "nanmedian");
+    auto result = a->t.nanmedian(d, keepdim != 0);
+    *values = wrap(std::get<0>(result));
+    *indices = wrap(std::get<1>(result));
+    return 0;
+  }
+  LT_CATCH_INT
+}
+
+lt_tensor* lt_nanquantile(lt_tensor* a, double q, int64_t dim, int has_dim,
+                          int keepdim) {
+  try {
+    clear_error();
+    std::optional<int64_t> axis;
+    if (has_dim) {
+      axis = resolve_dim(dim, a->t.dim(), "nanquantile");
+    }
+    return wrap(a->t.nanquantile(q, axis, keepdim != 0, "linear"));
+  }
+  LT_CATCH_NULL
 }
 
 lt_tensor* lt_all(lt_tensor* a, int64_t dim, int keepdim) {

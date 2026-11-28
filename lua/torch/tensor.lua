@@ -935,6 +935,41 @@ function Tensor:kthvalue(k, dim, keepdim)
   return value, index
 end
 
+-- Most frequent value and its 1-based index along a dimension.
+function Tensor:mode(dim, keepdim)
+  local axis = self:_cdim(dim == nil and self:dim() or dim)
+  local values_pointer = ffi.new("lt_tensor*[1]")
+  local indices_pointer = ffi.new("lt_tensor*[1]")
+  check(lib.lt_mode(self.h, axis, keepdim and 1 or 0,
+    values_pointer, indices_pointer))
+  return wrap(values_pointer[0]), wrap(indices_pointer[0]):add(1)
+end
+
+-- Median ignoring NaNs. Without a dimension it returns the flattened median
+-- value; with a dimension it also returns the 1-based source index.
+function Tensor:nanmedian(dim, keepdim)
+  local values_pointer = ffi.new("lt_tensor*[1]")
+  local indices_pointer = ffi.new("lt_tensor*[1]")
+  if dim == nil then
+    check(lib.lt_nanmedian(self.h, 0, 0, 0, values_pointer, nil))
+    return wrap(values_pointer[0])
+  end
+  check(lib.lt_nanmedian(self.h, self:_cdim(dim), 1,
+    keepdim and 1 or 0, values_pointer, indices_pointer))
+  return wrap(values_pointer[0]), wrap(indices_pointer[0]):add(1)
+end
+
+-- Quantile ignoring NaNs, with linear interpolation like quantile.
+function Tensor:nanquantile(q, dim, keepdim)
+  if type(q) ~= "number" or q ~= q or q < 0 or q > 1 then
+    error("nanquantile q must be a number in [0, 1]", 3)
+  end
+  local has_dim = dim ~= nil
+  local axis = has_dim and self:_cdim(dim) or 0
+  return wrap(lib.lt_nanquantile(self.h, q, axis, has_dim and 1 or 0,
+    keepdim and 1 or 0))
+end
+
 function Tensor:quantile(q, dim, keepdim)
   if type(q) ~= "number" or q ~= q or q < 0 or q > 1 then
     error("quantile q must be a number in [0, 1]", 3)

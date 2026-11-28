@@ -373,6 +373,12 @@ int lt_cummax(lt_tensor* a, int64_t dim, lt_tensor** values,
               lt_tensor** indices);
 int lt_cummin(lt_tensor* a, int64_t dim, lt_tensor** values,
               lt_tensor** indices);
+int lt_mode(lt_tensor* a, int64_t dim, int keepdim, lt_tensor** values,
+            lt_tensor** indices);
+int lt_nanmedian(lt_tensor* a, int64_t dim, int has_dim, int keepdim,
+                 lt_tensor** values, lt_tensor** indices);
+lt_tensor* lt_nanquantile(lt_tensor* a, double q, int64_t dim, int has_dim,
+                          int keepdim);
 lt_tensor* lt_all(lt_tensor* a, int64_t dim, int keepdim);
 lt_tensor* lt_any(lt_tensor* a, int64_t dim, int keepdim);
 

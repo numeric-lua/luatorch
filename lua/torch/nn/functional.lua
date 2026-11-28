@@ -63,6 +63,46 @@ function F.tanh(input)
   return input:tanh()
 end
 
+local function activation_inplace(input, output, inplace)
+  if inplace then
+    input:copy_(output)
+    return input
+  end
+  return output
+end
+
+function F.softplus(input, beta, threshold)
+  return input:softplus(beta, threshold)
+end
+
+function F.elu(input, alpha, inplace)
+  return activation_inplace(input, input:elu(alpha), inplace)
+end
+
+function F.selu(input, inplace)
+  return activation_inplace(input, input:selu(), inplace)
+end
+
+function F.silu(input, inplace)
+  return activation_inplace(input, input:silu(), inplace)
+end
+
+function F.gelu(input, approximate)
+  return input:gelu(approximate)
+end
+
+function F.hardsigmoid(input, inplace)
+  return activation_inplace(input, input:hardsigmoid(), inplace)
+end
+
+function F.hardswish(input, inplace)
+  return activation_inplace(input, input:hardswish(), inplace)
+end
+
+function F.softsign(input)
+  return input:softsign()
+end
+
 function F.softmax(input, dim)
   return input:softmax(dim)
 end
